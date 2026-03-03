@@ -7,7 +7,8 @@ AI code reviewer that watches your BitBucket PRs and posts review comments autom
 ### 1. Install
 
 ```bash
-uv tool install -e /path/to/nea-claudiu
+git clone git@github.com:simion/nea-claudiu.git
+uv tool install -e ./nea-claudiu
 ```
 
 ### 2. Create global config

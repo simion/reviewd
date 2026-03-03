@@ -51,8 +51,7 @@ class BitbucketConfig:
 
 @dataclass
 class ProjectConfig:
-    guidelines: str | None = None
-    explore: str | None = None
+    instructions: str | None = None
     test_commands: list[str] = field(default_factory=list)
     skip_title_patterns: list[str] = field(default_factory=list)
     skip_authors: list[str] = field(default_factory=list)
@@ -80,3 +79,4 @@ class GlobalConfig:
     repos: list[RepoConfig]
     state_db: str = '~/.local/share/nea-claudiu/state.db'
     ai_cli: AICli = AICli.CLAUDE
+    instructions: str | None = None

@@ -7,7 +7,7 @@ from nea_claudiu.commenter import post_review
 from nea_claudiu.config import load_project_config, resolve_bitbucket_config
 from nea_claudiu.models import GlobalConfig, PRInfo, ProjectConfig, RepoConfig
 from nea_claudiu.providers.bitbucket import BitbucketProvider
-from nea_claudiu.reviewer import review_pr
+from nea_claudiu.reviewer import cleanup_stale_worktrees, review_pr
 from nea_claudiu.state import StateDB
 
 logger = logging.getLogger(__name__)
@@ -32,12 +32,13 @@ def _process_pr(
     provider: BitbucketProvider,
     state_db: StateDB,
     dry_run: bool = False,
+    force: bool = False,
 ):
     if _should_skip(pr, project_config):
         return
 
-    if state_db.has_review(pr.repo_slug, pr.pr_id, pr.source_commit):
-        logger.debug('PR #%d@%s already reviewed', pr.pr_id, pr.source_commit[:8])
+    if not force and state_db.has_review(pr.repo_slug, pr.pr_id, pr.source_commit):
+        logger.warning('PR #%d@%s already reviewed (use --force to re-review)', pr.pr_id, pr.source_commit[:8])
         return
 
     logger.info('Reviewing PR #%d: %s (commit %s)', pr.pr_id, pr.title, pr.source_commit[:8])
@@ -67,35 +68,69 @@ def _process_repo(
 ):
     bb_config = resolve_bitbucket_config(global_config, repo_config)
     provider = BitbucketProvider(bb_config)
-    project_config = load_project_config(repo_config.path)
+    project_config = load_project_config(repo_config.path, global_config)
 
-    logger.info('Checking repo: %s', repo_config.name)
+    logger.debug('Checking repo: %s', repo_config.name)
     prs = provider.list_open_prs(repo_config.name)
-    logger.info('Found %d open PRs in %s', len(prs), repo_config.name)
+    logger.debug('Found %d open PRs in %s', len(prs), repo_config.name)
 
     for pr in prs:
         _process_pr(pr, repo_config, project_config, provider, state_db, dry_run=dry_run)
 
 
-def run_poll_loop(global_config: GlobalConfig, dry_run: bool = False):
+def _mark_existing_prs(global_config: GlobalConfig, state_db: StateDB):
+    for repo_config in global_config.repos:
+        bb_config = resolve_bitbucket_config(global_config, repo_config)
+        provider = BitbucketProvider(bb_config)
+        prs = provider.list_open_prs(repo_config.name)
+        skipped = 0
+        for pr in prs:
+            if not state_db.has_review(pr.repo_slug, pr.pr_id, pr.source_commit):
+                state_db.start_review(pr.repo_slug, pr.pr_id, pr.source_commit)
+                state_db.finish_review(pr.repo_slug, pr.pr_id, pr.source_commit)
+                skipped += 1
+        if skipped:
+            logger.warning(
+                '%s: skipped %d existing open PR(s) — use --review-existing to review them',
+                repo_config.name, skipped,
+            )
+
+
+def run_poll_loop(global_config: GlobalConfig, dry_run: bool = False, review_existing: bool = False):
     state_db = StateDB(global_config.state_db)
     poll_interval = global_config.bitbucket.poll_interval_seconds
 
+    for repo_config in global_config.repos:
+        cleanup_stale_worktrees(repo_config.path)
+
+    if not review_existing:
+        _mark_existing_prs(global_config, state_db)
+
     logger.info('Starting poll loop (interval=%ds, repos=%d, dry_run=%s)',
                 poll_interval, len(global_config.repos), dry_run)
+
+    import signal
+
+    def _handle_shutdown(_signum, _frame):
+        logger.info('Shutting down')
+        state_db.close()
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGINT, _handle_shutdown)
+    signal.signal(signal.SIGTERM, _handle_shutdown)
 
     try:
         while True:
             for repo_config in global_config.repos:
                 try:
                     _process_repo(repo_config, global_config, state_db, dry_run=dry_run)
+                except SystemExit:
+                    raise
                 except Exception:
                     logger.exception('Error processing repo %s', repo_config.name)
 
             logger.debug('Sleeping %ds until next poll', poll_interval)
             time.sleep(poll_interval)
-    except KeyboardInterrupt:
-        logger.info('Shutting down')
     finally:
         state_db.close()
 
@@ -106,14 +141,17 @@ def review_single_pr(
     pr_id: int | None = None,
     branch: str | None = None,
     dry_run: bool = False,
+    force: bool = False,
 ):
     repo_config = next((r for r in global_config.repos if r.name == repo_name), None)
     if repo_config is None:
         raise ValueError(f'Repo "{repo_name}" not found in config')
 
+    cleanup_stale_worktrees(repo_config.path)
+
     bb_config = resolve_bitbucket_config(global_config, repo_config)
     provider = BitbucketProvider(bb_config)
-    project_config = load_project_config(repo_config.path)
+    project_config = load_project_config(repo_config.path, global_config)
     state_db = StateDB(global_config.state_db)
 
     try:
@@ -127,6 +165,6 @@ def review_single_pr(
         else:
             raise ValueError('Either --pr or --branch must be specified')
 
-        _process_pr(pr, repo_config, project_config, provider, state_db, dry_run=dry_run)
+        _process_pr(pr, repo_config, project_config, provider, state_db, dry_run=dry_run, force=force)
     finally:
         state_db.close()

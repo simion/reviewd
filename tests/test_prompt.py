@@ -30,20 +30,13 @@ def test_basic_prompt():
     assert '```json' in prompt
 
 
-def test_guidelines_injected():
+def test_instructions_injected():
     pr = _make_pr()
-    config = ProjectConfig(guidelines='Use single quotes')
+    config = ProjectConfig(instructions='Use single quotes\nRead AGENTS.md first')
     prompt = build_review_prompt(pr, config)
 
-    assert '## Project-Specific Guidelines' in prompt
+    assert '## Project Instructions' in prompt
     assert 'Use single quotes' in prompt
-
-
-def test_explore_injected():
-    pr = _make_pr()
-    config = ProjectConfig(explore='Read AGENTS.md first')
-    prompt = build_review_prompt(pr, config)
-
     assert 'Read AGENTS.md first' in prompt
 
 
@@ -69,5 +62,5 @@ def test_empty_config_no_extra_sections():
     config = ProjectConfig()
     prompt = build_review_prompt(pr, config)
 
-    assert '## Project-Specific Guidelines' not in prompt
+    assert '## Project Instructions' not in prompt
     assert 'Run validation' not in prompt

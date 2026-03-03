@@ -24,6 +24,23 @@ JSON_BLOCK_PATTERN = re.compile(r'```json\s*\n(.*?)\n\s*```', re.DOTALL)
 DEFAULT_TIMEOUT = 600
 
 
+def cleanup_stale_worktrees(repo_path: str):
+    worktree_root = Path(repo_path) / '.nea-claudiu-worktrees'
+    if not worktree_root.exists():
+        return
+    for entry in worktree_root.iterdir():
+        if entry.is_dir():
+            result = subprocess.run(
+                ['git', 'worktree', 'remove', str(entry), '--force'],
+                cwd=repo_path,
+                capture_output=True,
+            )
+            if result.returncode == 0:
+                logger.info('Cleaned up stale worktree: %s', entry.name)
+            else:
+                logger.warning('Failed to clean worktree %s: %s', entry.name, result.stderr.decode().strip())
+
+
 def create_worktree(repo_path: str, pr: PRInfo) -> str:
     worktree_dir = Path(repo_path) / '.nea-claudiu-worktrees' / f'pr-{pr.pr_id}'
     worktree_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -103,18 +120,28 @@ def invoke_ai_cli(
         logger.info('Running %s review in %s (timeout=%ds)', ai_cli.value, cwd, timeout)
         env = {**os.environ}
         env.pop('CLAUDECODE', None)
-        result = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
             cwd=cwd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout,
             env=env,
         )
-        if result.returncode != 0:
-            logger.error('%s stderr: %s', ai_cli.value, result.stderr)
-            raise RuntimeError(f'{ai_cli.value} exited with code {result.returncode}: {result.stderr}')
-        return result.stdout
+        try:
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except (subprocess.TimeoutExpired, KeyboardInterrupt):
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+            raise
+        if proc.returncode != 0:
+            logger.error('%s stderr: %s', ai_cli.value, stderr)
+            raise RuntimeError(f'{ai_cli.value} exited with code {proc.returncode}: {stderr}')
+        return stdout
     finally:
         Path(prompt_file).unlink(missing_ok=True)
 

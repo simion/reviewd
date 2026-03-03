@@ -70,20 +70,32 @@ def load_global_config(path: str | Path | None = None) -> GlobalConfig:
         repos=repos,
         state_db=state_db,
         ai_cli=global_ai_cli,
+        instructions=data.get('instructions'),
     )
 
 
-def load_project_config(repo_path: str | Path) -> ProjectConfig:
+def load_project_config(repo_path: str | Path, global_config: GlobalConfig) -> ProjectConfig:
     config_path = Path(repo_path) / '.nea-claudiu.yaml'
-    if not config_path.exists():
-        return ProjectConfig()
+    data = {}
+    if config_path.exists():
+        with open(config_path) as f:
+            data = yaml.safe_load(f) or {}
 
-    with open(config_path) as f:
-        data = yaml.safe_load(f) or {}
+    # Merge instructions: global + per-project
+    parts = []
+    if global_config.instructions:
+        parts.append(global_config.instructions.strip())
+    if data.get('instructions'):
+        parts.append(data['instructions'].strip())
+    # Backwards compat: support old guidelines/explore fields
+    if data.get('guidelines'):
+        parts.append(data['guidelines'].strip())
+    if data.get('explore'):
+        parts.append(data['explore'].strip())
+    instructions = '\n\n'.join(parts) if parts else None
 
     return ProjectConfig(
-        guidelines=data.get('guidelines'),
-        explore=data.get('explore'),
+        instructions=instructions,
         test_commands=data.get('test_commands', []),
         skip_title_patterns=data.get('skip_title_patterns', []),
         skip_authors=data.get('skip_authors', []),

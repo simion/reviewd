@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Local CLI daemon that polls BitBucket for open PRs, reviews them using Claude/Gemini CLI, and posts structured comments back. The tool owns the review prompt and output schema. Users provide project-specific guidelines via `.nea-claudiu.yaml` in each repo.
+Local CLI daemon that polls BitBucket for open PRs, reviews them using Claude/Gemini CLI, and posts structured comments back. The tool owns the review prompt and output schema. Users provide project-specific instructions via `.nea-claudiu.yaml` in each repo.
 
 ## Architecture
 
@@ -30,31 +30,46 @@ Poller (BB API) → State Check (SQLite) → Worktree (git) → AI Review (CLI -
 | File | Purpose |
 |------|---------|
 | `src/nea_claudiu/cli.py` | Click CLI: `watch`, `review`, `status` commands |
-| `src/nea_claudiu/daemon.py` | Poll loop, orchestration, skip logic |
-| `src/nea_claudiu/reviewer.py` | Worktree lifecycle + AI CLI invocation + JSON extraction |
+| `src/nea_claudiu/daemon.py` | Poll loop, orchestration, skip logic, signal handling |
+| `src/nea_claudiu/reviewer.py` | Worktree lifecycle + AI CLI invocation (Popen) + JSON extraction |
 | `src/nea_claudiu/prompt.py` | Built-in review prompt template + builder |
-| `src/nea_claudiu/commenter.py` | Format findings as markdown, post via provider |
-| `src/nea_claudiu/config.py` | YAML + `${ENV_VAR}` loading, per-project merge |
+| `src/nea_claudiu/commenter.py` | Format findings as markdown bullets, post via provider |
+| `src/nea_claudiu/config.py` | YAML + `${ENV_VAR}` loading, global + per-project merge |
 | `src/nea_claudiu/state.py` | SQLite: reviews + posted_comments |
-| `src/nea_claudiu/models.py` | Dataclasses: PRInfo, Finding, ReviewResult, configs |
+| `src/nea_claudiu/models.py` | Dataclasses: PRInfo, Finding, ReviewResult, configs, AICli enum |
 | `src/nea_claudiu/providers/base.py` | Abstract GitProvider ABC |
 | `src/nea_claudiu/providers/bitbucket.py` | BitBucket 2.0 API (httpx, pagination, inline comments) |
 
-## Config Locations
+## Config
 
-- **Global**: `~/.config/nea-claudiu/config.yaml` — BB credentials, repos list, poll interval, AI CLI choice
-- **Per-project**: `{repo_root}/.nea-claudiu.yaml` — guidelines, explore instructions, test commands, skip patterns
-- **State DB**: `~/.local/share/nea-claudiu/state.db`
+### Global: `~/.config/nea-claudiu/config.yaml`
+
+BB credentials, repos list, poll interval, AI CLI choice, global `instructions`.
+
+### Per-project: `{repo_root}/.nea-claudiu.yaml`
+
+Project-specific `instructions`, `test_commands`, `skip_title_patterns`, `inline_comments_for`.
+
+Instructions merge: global instructions + per-project instructions are concatenated (global first). Old `guidelines`/`explore` fields still supported for backwards compat.
+
+### State DB: `~/.local/share/nea-claudiu/state.db`
 
 ## How the Review Works
 
 1. Fetch PR metadata from BB API
-2. Create git worktree at `{repo}/.nea-claudiu-worktrees/pr-{id}` (handles deleted branches by falling back to commit hash)
-3. Build prompt: PR metadata + user guidelines + explore/validation instructions + JSON schema
-4. Run `claude --print -p "<prompt>"` or `gemini -p "<prompt>"` in the worktree directory (strips `CLAUDECODE` env var to allow nested invocation)
-5. Extract last ```json``` block from stdout
-6. Post inline comments for critical findings + one summary comment with the rest
-7. Cleanup worktree
+2. Clean up stale worktrees from previous interrupted runs
+3. Create git worktree at `{repo}/.nea-claudiu-worktrees/pr-{id}` (handles deleted branches by falling back to commit hash)
+4. Build prompt: PR metadata + merged instructions + validation commands + JSON schema
+5. Run `claude --print -p "<prompt>"` or `gemini -p "<prompt>"` in the worktree via `Popen` (strips `CLAUDECODE` env var to allow nested invocation)
+6. Extract last ```json``` block from stdout
+7. Post inline comments for critical findings + one summary comment with the rest
+8. Cleanup worktree
+
+## CLI Flags
+
+- `watch`: `--review-existing` (review already-open PRs on startup, default: skip them), `--dry-run`, `-v`
+- `review`: `--pr N`, `--branch name`, `--force` (ignore DB state), `--dry-run`, `-v`
+- `status`: `--limit N`, `-v`
 
 ## Bot Comment Marker
 
@@ -67,6 +82,8 @@ Poller (BB API) → State Check (SQLite) → Worktree (git) → AI Review (CLI -
 - Can't `git fetch` by commit hash from BB (not allowed by default) — if source branch is deleted after merge, the commit must already exist locally
 - Claude CLI rejects nested sessions — must unset `CLAUDECODE` env var in subprocess
 - `gemini` CLI support is implemented but untested — invoked as `gemini -p <prompt>`
+- Ctrl+C handling uses `signal.SIGINT` → `SystemExit(0)` because Click swallows `KeyboardInterrupt`
+- AI subprocess uses `Popen` (not `subprocess.run`) so it can be terminated on Ctrl+C
 
 ## Running
 
@@ -77,9 +94,11 @@ uv tool install -e ~/r/nea-claudiu
 # One-shot review
 nea-claudiu review pydpf --pr 1234
 nea-claudiu review pydpf --pr 1234 --dry-run
+nea-claudiu review pydpf --pr 1234 --force    # re-review even if already done
 
-# Daemon mode
+# Daemon mode (skips existing open PRs by default)
 nea-claudiu watch -v
+nea-claudiu watch -v --review-existing         # also review already-open PRs
 nea-claudiu watch -v --dry-run
 
 # Review history
@@ -99,17 +118,14 @@ nea-claudiu status pydpf
 - Track which findings are still relevant vs resolved
 
 ### Review Quality
-- Add `test_commands` support with `{changed_files}` substitution (template exists, not yet wired to actual changed file detection from BB API)
+- Wire `{changed_files}` substitution to actual changed file detection from BB API
 - Consider adding a "confidence" field to findings
-- Let users configure severity thresholds for inline vs summary comments
 
 ### Comment Threading
 - BB API supports reply threads — could thread related findings under a parent comment
-- Would make long reviews more navigable
 
 ### Notifications
 - Slack/webhook notification when a review is posted
-- Summary of findings count by severity
 
 ### Multi-model Support
 - Allow configuring different models per repo (e.g., use opus for critical repos, sonnet for others)
