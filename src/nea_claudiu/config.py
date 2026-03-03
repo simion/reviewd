@@ -9,10 +9,12 @@ import yaml
 from nea_claudiu.models import (
     AICli,
     BitbucketConfig,
+    GithubConfig,
     GlobalConfig,
     ProjectConfig,
     RepoConfig,
 )
+from nea_claudiu.providers.base import GitProvider
 
 ENV_VAR_PATTERN = re.compile(r'\$\{(\w+)\}')
 
@@ -32,7 +34,12 @@ def _parse_bitbucket_config(data: dict) -> BitbucketConfig:
     return BitbucketConfig(
         workspace=_resolve_env_vars(str(data['workspace'])),
         auth_token=_resolve_env_vars(str(data['auth_token'])),
-        poll_interval_seconds=data.get('poll_interval_seconds', 60),
+    )
+
+
+def _parse_github_config(data: dict) -> GithubConfig:
+    return GithubConfig(
+        token=_resolve_env_vars(str(data['token'])),
     )
 
 
@@ -45,7 +52,14 @@ def load_global_config(path: str | Path | None = None) -> GlobalConfig:
     with open(path) as f:
         data = yaml.safe_load(f)
 
-    global_bb = _parse_bitbucket_config(data['bitbucket'])
+    global_bb = None
+    if 'bitbucket' in data:
+        global_bb = _parse_bitbucket_config(data['bitbucket'])
+
+    global_gh = None
+    if 'github' in data:
+        global_gh = _parse_github_config(data['github'])
+
     global_ai_cli = AICli(data.get('ai_cli', 'claude'))
 
     repos = []
@@ -54,11 +68,16 @@ def load_global_config(path: str | Path | None = None) -> GlobalConfig:
         if 'bitbucket' in repo_data:
             repo_bb = _parse_bitbucket_config(repo_data['bitbucket'])
 
+        repo_gh = None
+        if 'github' in repo_data:
+            repo_gh = _parse_github_config(repo_data['github'])
+
         repos.append(RepoConfig(
             name=repo_data['name'],
             path=str(Path(repo_data['path']).expanduser()),
             provider=repo_data.get('provider', 'bitbucket'),
             bitbucket=repo_bb,
+            github=repo_gh,
             ai_cli=AICli(repo_data.get('ai_cli', global_ai_cli)),
         ))
 
@@ -66,11 +85,19 @@ def load_global_config(path: str | Path | None = None) -> GlobalConfig:
     state_db = str(Path(_resolve_env_vars(state_db)).expanduser())
 
     return GlobalConfig(
-        bitbucket=global_bb,
         repos=repos,
+        bitbucket=global_bb,
+        github=global_gh,
         state_db=state_db,
         ai_cli=global_ai_cli,
         instructions=data.get('instructions'),
+        poll_interval_seconds=data.get('poll_interval_seconds', 60),
+        reviewer_name=data.get('reviewer_name', "Nea' ~Caisă~ Claudiu"),
+        footer=data.get(
+            'footer',
+            'Automated review by [nea-claudiu](https://github.com/simion/nea-claudiu). '
+            'Findings are AI-generated — use your judgment.',
+        ),
     )
 
 
@@ -107,4 +134,25 @@ def load_project_config(repo_path: str | Path, global_config: GlobalConfig) -> P
 def resolve_bitbucket_config(global_config: GlobalConfig, repo_config: RepoConfig) -> BitbucketConfig:
     if repo_config.bitbucket is not None:
         return repo_config.bitbucket
-    return global_config.bitbucket
+    if global_config.bitbucket is not None:
+        return global_config.bitbucket
+    raise ValueError(f'No bitbucket config found for repo "{repo_config.name}"')
+
+
+def resolve_github_config(global_config: GlobalConfig, repo_config: RepoConfig) -> GithubConfig:
+    if repo_config.github is not None:
+        return repo_config.github
+    if global_config.github is not None:
+        return global_config.github
+    raise ValueError(f'No github config found for repo "{repo_config.name}"')
+
+
+def get_provider(global_config: GlobalConfig, repo_config: RepoConfig) -> GitProvider:
+    if repo_config.provider == 'github':
+        from nea_claudiu.providers.github import GithubProvider
+        config = resolve_github_config(global_config, repo_config)
+        return GithubProvider(config)
+
+    from nea_claudiu.providers.bitbucket import BitbucketProvider
+    config = resolve_bitbucket_config(global_config, repo_config)
+    return BitbucketProvider(config)

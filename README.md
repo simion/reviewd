@@ -1,6 +1,6 @@
 # nea-claudiu
 
-**Local AI code reviewer for BitBucket pull requests.** Watches your repos for new PRs, reviews them using Claude or Gemini, and posts structured comments — all from your machine.
+**Local AI code reviewer for GitHub and BitBucket pull requests.** Watches your repos for new PRs, reviews them using Claude or Gemini, and posts structured comments — all from your machine.
 
 No CI pipeline. No cloud service. No API keys beyond your existing AI CLI.
 
@@ -66,18 +66,46 @@ mkdir -p ~/.config/nea-claudiu
 
 Create `~/.config/nea-claudiu/config.yaml`:
 
+<details>
+<summary><b>GitHub setup</b></summary>
+
+1. Create a [Personal Access Token](https://github.com/settings/tokens) with the **`repo`** scope (or a [fine-grained token](https://github.com/settings/tokens?type=beta) with **Pull requests: Read and write**).
+2. Export it: `export GITHUB_TOKEN=ghp_...`
+3. Config:
+
+```yaml
+github:
+  token: ${GITHUB_TOKEN}
+
+repos:
+  - name: owner/my-repo        # must be owner/repo format
+    path: ~/repos/my-repo
+    provider: github
+```
+
+</details>
+
+<details>
+<summary><b>BitBucket setup</b></summary>
+
+1. Create an [App Password](https://bitbucket.org/account/settings/app-passwords/) with **Pull requests: Read** and **Pull requests: Write** permissions.
+2. Export it: `export BB_AUTH_TOKEN=ATCTT3x...`
+3. Config:
+
 ```yaml
 bitbucket:
   workspace: your-workspace
-  auth_token: ${BB_AUTH_TOKEN}   # or paste directly
-  poll_interval_seconds: 60
+  auth_token: ${BB_AUTH_TOKEN}
 
 repos:
-  - name: my-project
+  - name: my-project            # repo slug (not owner/repo)
     path: ~/repos/my-project
+    provider: bitbucket
 ```
 
-That's it. You can now review PRs.
+</details>
+
+You can configure both providers in the same config file to watch GitHub and BitBucket repos together.
 
 ### 3. Review a PR
 
@@ -95,10 +123,10 @@ nea-claudiu watch -v
 ## How It Works
 
 ```
-Poll BitBucket → Check State (SQLite) → Create Worktree → AI Review (Claude/Gemini CLI) → Parse JSON → Post Comments
+Poll Provider (GitHub/BitBucket) → Check State (SQLite) → Create Worktree → AI Review (Claude/Gemini CLI) → Parse JSON → Post Comments
 ```
 
-1. Fetches open PRs from the BitBucket API
+1. Fetches open PRs from the GitHub or BitBucket API
 2. Skips PRs that have already been reviewed at the current commit
 3. Creates a git worktree for the PR branch (fast — shares `.git` with your clone)
 4. Builds a review prompt with PR metadata, project instructions, and a JSON output schema
@@ -113,12 +141,21 @@ Poll BitBucket → Check State (SQLite) → Create Worktree → AI Review (Claud
 ### Global config (`~/.config/nea-claudiu/config.yaml`)
 
 ```yaml
+poll_interval_seconds: 60
+
+# Provider credentials (configure one or both)
+github:
+  token: ${GITHUB_TOKEN}
+
 bitbucket:
   workspace: your-workspace
   auth_token: ${BB_AUTH_TOKEN}
-  poll_interval_seconds: 60
 
 ai_cli: claude  # or "gemini"
+
+# Customize the review header and footer (supports markdown)
+# reviewer_name: "Nea' ~Caisă~ Claudiu"
+# footer: "Automated review by ..."
 
 # Global review instructions (applied to all repos)
 instructions: |
@@ -126,15 +163,18 @@ instructions: |
   Every issue must include a concrete suggested fix.
 
 repos:
-  - name: backend
-    path: ~/repos/backend
+  - name: owner/gh-backend
+    path: ~/repos/gh-backend
+    provider: github
 
-  - name: frontend
-    path: ~/repos/frontend
+  - name: bb-frontend
+    path: ~/repos/bb-frontend
+    provider: bitbucket
     ai_cli: gemini  # override per repo
 
   - name: other-project
     path: ~/repos/other-project
+    provider: bitbucket
     bitbucket:
       workspace: other-workspace      # different BB workspace
       auth_token: ${OTHER_BB_TOKEN}   # different credentials
@@ -200,7 +240,7 @@ nea-claudiu status my-project --limit 50
 
 - Python 3.12+
 - [`claude`](https://docs.anthropic.com/en/docs/claude-code) or [`gemini`](https://ai.google.dev/gemini-api/docs/gemini-cli) CLI installed and authenticated
-- BitBucket app password with `pullrequest:write` scope
+- GitHub personal access token with `repo` scope, or BitBucket app password with `pullrequest:write` scope
 - Git
 - [`uv`](https://docs.astral.sh/uv/) (for installation)
 
@@ -211,11 +251,10 @@ nea-claudiu status my-project --limit 50
 - **AI has full tool access** — reads files, runs commands, explores the codebase in the worktree
 - **JSON output schema** — the AI outputs structured findings, the tool just parses and posts
 - **SQLite state** — tracks reviews by `(repo, pr_id, source_commit)` to avoid duplicates
-- **Provider abstraction** — BitBucket today, GitHub support planned
+- **Provider abstraction** — GitHub and BitBucket supported, extensible to others
 
 ## Roadmap
 
-- **GitHub provider** — same interface, different API
 - **Incremental re-reviews** — diff only new commits since last review
 - **Slack/webhook notifications** — get notified when a review is posted
 - **Multi-model support** — configure different AI models per repo

@@ -21,6 +21,7 @@ class GitProvider(ABC):
         *,
         file_path: str | None = None,
         line: int | None = None,
+        source_commit: str | None = None,
     ) -> int: ...
 
     @abstractmethod

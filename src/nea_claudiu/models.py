@@ -46,7 +46,11 @@ class PRInfo:
 class BitbucketConfig:
     workspace: str
     auth_token: str
-    poll_interval_seconds: int = 60
+
+
+@dataclass
+class GithubConfig:
+    token: str
 
 
 @dataclass
@@ -70,13 +74,18 @@ class RepoConfig:
     path: str
     provider: str = 'bitbucket'
     bitbucket: BitbucketConfig | None = None
+    github: GithubConfig | None = None
     ai_cli: AICli = AICli.CLAUDE
 
 
 @dataclass
 class GlobalConfig:
-    bitbucket: BitbucketConfig
     repos: list[RepoConfig]
+    bitbucket: BitbucketConfig | None = None
+    github: GithubConfig | None = None
     state_db: str = '~/.local/share/nea-claudiu/state.db'
     ai_cli: AICli = AICli.CLAUDE
     instructions: str | None = None
+    poll_interval_seconds: int = 60
+    reviewer_name: str = "Nea' ~Caisă~ Claudiu"
+    footer: str = 'Automated review by [nea-claudiu](https://github.com/simion/nea-claudiu). Findings are AI-generated — use your judgment.'

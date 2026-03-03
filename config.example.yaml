@@ -1,23 +1,36 @@
 # Global config: ~/.config/nea-claudiu/config.yaml
 
+poll_interval_seconds: 60
+
+# Provider credentials (configure one or both)
+github:
+  token: ${GITHUB_TOKEN}
+
 bitbucket:
   workspace: your-workspace
   auth_token: ${BB_AUTH_TOKEN}
-  poll_interval_seconds: 60
 
 # AI CLI to use: "claude" or "gemini" (default: claude)
 # Can be overridden per repo
 ai_cli: claude
 
+# Customize the review header and footer (supports markdown)
+# reviewer_name: "Nea' ~Caisă~ Claudiu"
+# footer: "Automated review by [nea-claudiu](https://github.com/simion/nea-claudiu). Findings are AI-generated — use your judgment."
+
 repos:
-  - name: my-project
-    path: ~/Work/Repos/my-project
+  - name: owner/my-gh-repo
+    path: ~/Work/Repos/my-gh-repo
+    provider: github
+
+  - name: my-bb-project
+    path: ~/Work/Repos/my-bb-project
+    provider: bitbucket
     # ai_cli: gemini  # override per repo
 
   # - name: other-project
   #   path: ~/Work/Repos/other-project
   #   provider: bitbucket
-  #   ai_cli: gemini
   #   bitbucket:
   #     workspace: other-workspace
   #     auth_token: ${OTHER_BB_TOKEN}

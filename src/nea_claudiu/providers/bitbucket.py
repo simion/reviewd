@@ -71,6 +71,7 @@ class BitbucketProvider(GitProvider):
         *,
         file_path: str | None = None,
         line: int | None = None,
+        source_commit: str | None = None,
     ) -> int:
         url = f'/repositories/{self.workspace}/{repo_slug}/pullrequests/{pr_id}/comments'
         payload: dict = {'content': {'raw': f'{body}\n\n{BOT_MARKER}'}}

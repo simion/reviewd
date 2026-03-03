@@ -32,7 +32,7 @@ def main(ctx, config_path: str | None):
 
 @main.command()
 @click.option('-v', '--verbose', is_flag=True, help='Enable verbose logging')
-@click.option('--dry-run', is_flag=True, help='Print reviews without posting to BitBucket')
+@click.option('--dry-run', is_flag=True, help='Print reviews without posting')
 @click.option('--review-existing', is_flag=True, help='Review already-open PRs on startup (default: only new PRs)')
 @click.pass_context
 def watch(ctx, verbose: bool, dry_run: bool, review_existing: bool):

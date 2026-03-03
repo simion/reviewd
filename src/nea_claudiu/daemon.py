@@ -4,9 +4,9 @@ import logging
 import time
 
 from nea_claudiu.commenter import post_review
-from nea_claudiu.config import load_project_config, resolve_bitbucket_config
+from nea_claudiu.config import get_provider, load_project_config
 from nea_claudiu.models import GlobalConfig, PRInfo, ProjectConfig, RepoConfig
-from nea_claudiu.providers.bitbucket import BitbucketProvider
+from nea_claudiu.providers.base import GitProvider
 from nea_claudiu.reviewer import cleanup_stale_worktrees, review_pr
 from nea_claudiu.state import StateDB
 
@@ -29,7 +29,8 @@ def _process_pr(
     pr: PRInfo,
     repo_config: RepoConfig,
     project_config: ProjectConfig,
-    provider: BitbucketProvider,
+    global_config: GlobalConfig,
+    provider: GitProvider,
     state_db: StateDB,
     dry_run: bool = False,
     force: bool = False,
@@ -50,8 +51,8 @@ def _process_pr(
             ai_cli=repo_config.ai_cli,
         )
         post_review(
-            provider, state_db, pr.repo_slug, pr.pr_id,
-            result, project_config, dry_run=dry_run,
+            provider, state_db, pr,
+            result, project_config, global_config, dry_run=dry_run,
         )
         state_db.finish_review(pr.repo_slug, pr.pr_id, pr.source_commit)
         logger.info('Finished review of PR #%d (%d findings)', pr.pr_id, len(result.findings))
@@ -66,8 +67,7 @@ def _process_repo(
     state_db: StateDB,
     dry_run: bool = False,
 ):
-    bb_config = resolve_bitbucket_config(global_config, repo_config)
-    provider = BitbucketProvider(bb_config)
+    provider = get_provider(global_config, repo_config)
     project_config = load_project_config(repo_config.path, global_config)
 
     logger.debug('Checking repo: %s', repo_config.name)
@@ -75,13 +75,12 @@ def _process_repo(
     logger.debug('Found %d open PRs in %s', len(prs), repo_config.name)
 
     for pr in prs:
-        _process_pr(pr, repo_config, project_config, provider, state_db, dry_run=dry_run)
+        _process_pr(pr, repo_config, project_config, global_config, provider, state_db, dry_run=dry_run)
 
 
 def _mark_existing_prs(global_config: GlobalConfig, state_db: StateDB):
     for repo_config in global_config.repos:
-        bb_config = resolve_bitbucket_config(global_config, repo_config)
-        provider = BitbucketProvider(bb_config)
+        provider = get_provider(global_config, repo_config)
         prs = provider.list_open_prs(repo_config.name)
         skipped = 0
         for pr in prs:
@@ -98,7 +97,7 @@ def _mark_existing_prs(global_config: GlobalConfig, state_db: StateDB):
 
 def run_poll_loop(global_config: GlobalConfig, dry_run: bool = False, review_existing: bool = False):
     state_db = StateDB(global_config.state_db)
-    poll_interval = global_config.bitbucket.poll_interval_seconds
+    poll_interval = global_config.poll_interval_seconds
 
     for repo_config in global_config.repos:
         cleanup_stale_worktrees(repo_config.path)
@@ -158,8 +157,7 @@ def review_single_pr(
 
     cleanup_stale_worktrees(repo_config.path)
 
-    bb_config = resolve_bitbucket_config(global_config, repo_config)
-    provider = BitbucketProvider(bb_config)
+    provider = get_provider(global_config, repo_config)
     project_config = load_project_config(repo_config.path, global_config)
     state_db = StateDB(global_config.state_db)
 
@@ -174,6 +172,6 @@ def review_single_pr(
         else:
             raise ValueError('Either --pr or --branch must be specified')
 
-        _process_pr(pr, repo_config, project_config, provider, state_db, dry_run=dry_run, force=force)
+        _process_pr(pr, repo_config, project_config, global_config, provider, state_db, dry_run=dry_run, force=force)
     finally:
         state_db.close()
