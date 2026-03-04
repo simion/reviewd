@@ -27,12 +27,16 @@
 ### 1. Install
 
 ```bash
-git clone https://github.com/simion/reviewd.git
-cd reviewd
-uv tool install -e .
+pip install reviewd
 ```
 
-Requires Python 3.12+ and [`uv`](https://docs.astral.sh/uv/). You also need `claude` or `gemini` CLI installed and authenticated.
+Or with [`uv`](https://docs.astral.sh/uv/):
+
+```bash
+uv tool install reviewd
+```
+
+Requires Python 3.12+. You also need `claude` or `gemini` CLI installed and authenticated.
 
 ### 2. Configure
 
