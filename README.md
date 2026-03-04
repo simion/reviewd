@@ -193,11 +193,17 @@ reviewd status <repo>                         # review history
 
 > reviewd gives the AI CLI full tool access in git worktrees on your machine. Only watch repos where you trust the contributors.
 
-**Claude CLI (recommended)** runs with `--print` mode — read-only, no tool use, no code execution. The AI only sees the prompt and returns text. This is the safest option.
+**Claude CLI (recommended)** is the more secure option. It runs with:
+- `--print` mode — read-only, no tool use, no code execution. The AI only sees the prompt and returns text.
+- `--disallowedTools Write,Edit` — explicitly blocks file modification tools as an extra layer
+- `--mcp-config '{"mcpServers":{}}' --strict-mcp-config` — disables all MCP servers, preventing external tool access
+- `CLAUDECODE` env var is unset — prevents nested Claude Code sessions
 
-**Gemini CLI** runs with `--approval-mode yolo` because it has no equivalent print-only mode. This means Gemini can execute commands and modify files in the worktree during review. Extensions are disabled (`-e none`), but it's inherently less sandboxed than Claude's `--print`.
+**Gemini CLI** runs with `--approval-mode yolo` because it has no equivalent print-only mode. This means Gemini can execute commands and modify files in the worktree during review. Mitigated by:
+- `-e none` — disables all extensions (no web access, no file tools beyond built-in)
+- But it's inherently less sandboxed than Claude's `--print`
 
-**Mitigations:**
+**General mitigations (both CLIs):**
 - Reviews run in isolated git worktrees, not your working copy
 - The prompt includes a security scope block forbidding file writes, network access, and secret access
 - Per-project config (`.reviewd.yaml`) is read from the main repo, not the worktree — PR authors can't inject instructions
