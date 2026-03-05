@@ -235,19 +235,31 @@ def run_poll_loop(
             now = datetime.now().strftime('%H:%M:%S')
             for i, repo_config in enumerate(global_config.repos, 1):
                 _status(f'[{now}] Checking {repo_config.name} ({i}/{total_repos})')
-                try:
-                    _process_repo(repo_config, global_config, state_db, dry_run=dry_run)
-                except SystemExit:
-                    raise
-                except httpx.HTTPStatusError as e:
-                    if e.response.status_code >= 500:
-                        logger.warning(
-                            'Transient %s for %s, will retry next cycle', e.response.status_code, repo_config.name
-                        )
-                    else:
-                        logger.exception('HTTP error processing repo %s', repo_config.name)
-                except Exception:
-                    logger.exception('Error processing repo %s', repo_config.name)
+                for attempt in range(3):
+                    try:
+                        _process_repo(repo_config, global_config, state_db, dry_run=dry_run)
+                        break
+                    except SystemExit:
+                        raise
+                    except httpx.TransportError:
+                        if attempt < 2:
+                            logger.warning('Network error for %s, retrying (%d/2)...', repo_config.name, attempt + 1)
+                            time.sleep(2)
+                        else:
+                            logger.exception('Network error processing repo %s', repo_config.name)
+                    except httpx.HTTPStatusError as e:
+                        if e.response.status_code >= 500:
+                            logger.warning(
+                                'Transient %s for %s, will retry next cycle',
+                                e.response.status_code,
+                                repo_config.name,
+                            )
+                        else:
+                            logger.exception('HTTP error processing repo %s', repo_config.name)
+                        break
+                    except Exception:
+                        logger.exception('Error processing repo %s', repo_config.name)
+                        break
 
             next_check = datetime.now().timestamp() + poll_interval
             while time.time() < next_check:
