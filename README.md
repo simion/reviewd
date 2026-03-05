@@ -216,9 +216,7 @@ reviewd status <repo>                         # review history
 
 ## Disclaimer
 
-> This project is **100% vibe-coded** — written entirely through AI-assisted development with Claude Code, with thorough human review and guidance at every step.
->
-> Because we have production code to ship and no time to hand-craft internal tooling.
+> Built entirely with AI-assisted development (Claude Code), with thorough human review and guidance at every step. Because we have production code to ship and no time to hand-craft internal tooling.
 >
 > Why is that fine? It's a read-only tool that posts PR comments. The worst it can do is post a bad review.
 
