@@ -209,6 +209,11 @@ reviewd status <repo>                         # review history
 - Per-project config (`.reviewd.yaml`) is read from the main repo, not the worktree — PR authors can't inject instructions
 - `test_commands` come only from the repo owner's config, not from PR content
 
+## Roadmap
+
+- [ ] Parallel PR review queue
+- [ ] GitLab support
+
 ## Disclaimer
 
 > This project is **100% vibe-coded** — written entirely through AI-assisted development with Claude Code, with thorough human review and guidance at every step.
