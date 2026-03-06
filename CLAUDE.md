@@ -98,12 +98,14 @@ reviewd status pydpf                          # review history
 
 Publish directly to PyPI with `uv publish`. No GitHub Releases — `gh` CLI is not available.
 
+Requires `UV_PUBLISH_TOKEN` env var (PyPI API token).
+
 ```bash
 # 1. Bump version in pyproject.toml
 # 2. Commit and push
 git add pyproject.toml && git commit -m "Bump version to X.Y.Z" && git push
-# 3. Build and publish
-uv build && uv publish
+# 3. Clean old builds, build, and publish
+rm -rf dist && uv build && uv publish
 ```
 
 ## Known Limitations
