@@ -85,7 +85,7 @@ def _format_summary_comment(
         lines.append(f'**Bottom line:** {result.summary}')
         lines.append('')
 
-    if result.approve and result.approve_reason:
+    if project_config.auto_approve.enabled and result.approve and result.approve_reason:
         lines.append(f'**Auto-approve rationale:** {result.approve_reason}')
         lines.append('')
 
