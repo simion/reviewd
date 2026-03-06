@@ -144,12 +144,11 @@ def _process_pr(
 
     logger.log(
         22,
-        f'{GREEN}%s{RESET} — Reviewing PR #%d: {CYAN}%s{RESET} by {BOLD_WHITE}%s{RESET} (commit %s)',
-        repo_config.name,
+        f'\nReviewing PR #%d by {BOLD_WHITE}%s{RESET} - {GREEN}%s{RESET} - {CYAN}%s{RESET}',
         pr.pr_id,
-        pr.title,
         pr.author,
-        pr.source_commit[:8],
+        repo_config.name,
+        pr.title,
     )
     state_db.start_review(pr.repo_slug, pr.pr_id, pr.source_commit)
 

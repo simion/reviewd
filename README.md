@@ -1,5 +1,10 @@
 # reviewd
 
+[![PyPI](https://img.shields.io/pypi/v/reviewd)](https://pypi.org/project/reviewd/)
+[![Python 3.12+](https://img.shields.io/pypi/pyversions/reviewd)](https://pypi.org/project/reviewd/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![CI](https://github.com/simion/reviewd/actions/workflows/ci.yml/badge.svg)](https://github.com/simion/reviewd/actions/workflows/ci.yml)
+
 **The review daemon** — local AI code reviewer for GitHub and BitBucket pull requests, powered by Claude Code / Gemini CLI subscriptions.
 
 - Watches your repos for new PRs, reviews them using Claude or Gemini CLI, and posts structured comments

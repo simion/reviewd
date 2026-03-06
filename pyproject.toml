@@ -36,9 +36,14 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/reviewd"]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["tests"]
+
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "respx>=0.22",
     "ruff>=0.8",
     "black>=24",
     "pre-commit>=4",

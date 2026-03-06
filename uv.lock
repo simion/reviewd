@@ -352,8 +352,20 @@ wheels = [
 ]
 
 [[package]]
+name = "respx"
+version = "0.22.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/f4/7c/96bd0bc759cf009675ad1ee1f96535edcb11e9666b985717eb8c87192a95/respx-0.22.0.tar.gz", hash = "sha256:3c8924caa2a50bd71aefc07aa812f2466ff489f1848c96e954a5362d17095d91", size = 28439, upload-time = "2024-12-19T22:33:59.374Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8e/67/afbb0978d5399bc9ea200f1d4489a23c9a1dad4eee6376242b8182389c79/respx-0.22.0-py2.py3-none-any.whl", hash = "sha256:631128d4c9aba15e56903fb5f66fb1eff412ce28dd387ca3a81339e52dbd3ad0", size = 25127, upload-time = "2024-12-19T22:33:57.837Z" },
+]
+
+[[package]]
 name = "reviewd"
-version = "0.2.0"
+version = "0.2.2"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -366,6 +378,7 @@ dev = [
     { name = "black" },
     { name = "pre-commit" },
     { name = "pytest" },
+    { name = "respx" },
     { name = "ruff" },
 ]
 
@@ -381,6 +394,7 @@ dev = [
     { name = "black", specifier = ">=24" },
     { name = "pre-commit", specifier = ">=4" },
     { name = "pytest", specifier = ">=9.0.2" },
+    { name = "respx", specifier = ">=0.22" },
     { name = "ruff", specifier = ">=0.8" },
 ]
 
