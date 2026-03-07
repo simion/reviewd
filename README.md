@@ -134,7 +134,7 @@ bitbucket:
 cli: claude                    # or "gemini"
 # model: claude-sonnet-4-5-20250514
 
-# review_title: "Code Review ({cli})"
+# review_title: "reviewd ({cli})"
 # footer: "Automated review by ..."
 # skip_title_patterns: ['[no-review]', '[wip]', '[no-claudiu]']
 # skip_authors: []

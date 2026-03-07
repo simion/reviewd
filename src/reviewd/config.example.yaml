@@ -39,7 +39,7 @@
 # --- Review appearance ---
 
 # Title shown as the H2 heading of the summary comment (supports markdown)
-# review_title: "Code Review ({cli})"
+# review_title: "reviewd ({cli})"
 
 # Footer disclaimer appended to every summary comment
 # footer: "Automated review by [reviewd](https://github.com/simion/reviewd). Findings are AI-generated — use your judgment."

@@ -120,7 +120,7 @@ class GlobalConfig:
     skip_authors: list[str] = field(default_factory=list)
     poll_interval_seconds: int = 60
     max_concurrent_reviews: int = 4
-    review_title: str = "Code Review ({cli})"
+    review_title: str = "reviewd ({cli})"
     footer: str = (
         'Automated review by [reviewd](https://github.com/simion/reviewd).'
         ' Findings are AI-generated — use your judgment.'
