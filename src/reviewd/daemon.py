@@ -211,6 +211,9 @@ def _collect_eligible_prs(
 
     eligible = []
     for pr in prs:
+        if not pr.source_commit:
+            logger.debug('PR #%d has no source commit (branch deleted?), skipping', pr.pr_id)
+            continue
         if _should_skip(pr, global_config):
             continue
         if state_db.has_review(pr.repo_slug, pr.pr_id, pr.source_commit):
@@ -360,7 +363,7 @@ def run_poll_loop(
                     except Exception:
                         logger.exception('Review thread failed for PR #%d', pr_info.pr_id)
 
-                remaining = int(next_check - time.time())
+                remaining = max(0, int(next_check - time.time()))
                 now = datetime.now().strftime('%H:%M:%S')
                 active = len(futures)
                 suffix = f', {active} review(s) active' if active else ''
