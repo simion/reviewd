@@ -287,6 +287,8 @@ def extract_json(output: str) -> dict:
         logger.error('No JSON block found in AI output. Last 500 chars:\n%s', tail)
         raise ValueError('No JSON block found in AI output')
     raw = matches[-1]
+    # Strip trailing commas before } or ] (common LLM JSON error)
+    raw = re.sub(r',\s*([}\]])', r'\1', raw)
     try:
         return json.loads(raw)
     except json.JSONDecodeError as e:
