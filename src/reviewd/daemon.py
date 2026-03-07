@@ -182,7 +182,6 @@ def _process_pr(
             project_config,
             global_config,
             cli=repo_config.cli,
-            model=repo_config.model or global_config.model,
             dry_run=dry_run,
             diff_lines=diff_lines,
         )
