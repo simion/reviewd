@@ -361,6 +361,14 @@ repos:
 
 
 def run_wizard():
+    try:
+        _run_wizard_inner()
+    except KeyboardInterrupt:
+        click.echo()
+        click.echo(click.style('Setup cancelled.', fg='yellow'))
+
+
+def _run_wizard_inner():
     config_dir = Path('~/.config/reviewd').expanduser()
     config_path = config_dir / 'config.yaml'
 

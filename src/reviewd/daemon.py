@@ -214,6 +214,12 @@ def _collect_eligible_prs(
         if state_db.has_review(pr.repo_slug, pr.pr_id, pr.source_commit):
             logger.debug('PR #%d@%s already reviewed, skipping', pr.pr_id, pr.source_commit[:8])
             continue
+        if project_config.review_cooldown_minutes > 0:
+            minutes = state_db.minutes_since_last_review(pr.repo_slug, pr.pr_id)
+            if minutes is not None and minutes < project_config.review_cooldown_minutes:
+                remaining = int(project_config.review_cooldown_minutes - minutes)
+                logger.debug('PR #%d in cooldown (%dmin remaining), skipping', pr.pr_id, remaining)
+                continue
         eligible.append((pr, repo_config, project_config, global_config, provider))
     return eligible
 
@@ -263,6 +269,7 @@ def run_poll_loop(
 ):
     global _is_verbose
     _is_verbose = verbose
+    _shutdown_event.clear()
 
     state_db = StateDB(global_config.state_db)
     lock_path = _get_pid_lock_path(global_config.state_db)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 
 import httpx
 
@@ -12,12 +13,15 @@ logger = logging.getLogger(__name__)
 BOT_MARKER = '[](reviewd)'
 BB_API_BASE = 'https://api.bitbucket.org/2.0'
 
+# Matches "user@domain:token" format for Basic auth (email:token)
+_BASIC_AUTH_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+:.+$')
+
 
 class BitbucketProvider(GitProvider):
     def __init__(self, workspace: str, auth_token: str):
         self.workspace = workspace
         # auth_token can be "email:token" (Basic auth) or a plain OAuth token (Bearer)
-        if ':' in auth_token and '@' in auth_token.split(':')[0]:
+        if _BASIC_AUTH_RE.match(auth_token):
             email, token = auth_token.split(':', 1)
             auth = (email, token)
             headers = {'Content-Type': 'application/json'}
