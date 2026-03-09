@@ -1,6 +1,6 @@
 [project]
 name = "reviewd"
-version = "0.4.2"
+version = "0.4.3"
 description = "Local AI code reviewer for GitHub and BitBucket PRs — uses Claude, Gemini, or Codex CLI to review pull requests and post structured comments"
 readme = "README.md"
 license = "MIT"

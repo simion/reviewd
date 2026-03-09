@@ -92,10 +92,9 @@ def _format_elapsed(elapsed: int, timeout: int = DEFAULT_TIMEOUT) -> str:
 def _format_progress_bar(elapsed: int, timeout: int = DEFAULT_TIMEOUT, width: int = 10) -> str:
     ratio = min(elapsed / timeout, 1.0)
     filled = int(ratio * width)
-    bar = '█' * filled + '░' * (width - filled)
-    color = YELLOW if ratio >= 0.8 else ''
-    reset = RESET if color else ''
-    return f'{color}{bar}{reset}'
+    remaining = width - filled
+    color = YELLOW if ratio >= 0.8 else GREEN
+    return f'{color}{"━" * filled}{RESET}{DIM}{"─" * remaining}{RESET}'
 
 
 def _build_review_status() -> str:
