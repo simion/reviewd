@@ -5,31 +5,30 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/simion/reviewd/actions/workflows/ci.yml/badge.svg)](https://github.com/simion/reviewd/actions/workflows/ci.yml)
 
-**The review daemon** — local AI code reviewer for GitHub and BitBucket pull requests, powered by Claude Code / Gemini / Codex CLI subscriptions.
+**Your local code review assistant** — review GitHub and BitBucket pull requests from your terminal, powered by Claude Code / Gemini / Codex CLI.
 
-- Watches your repos for new PRs, reviews them using Claude, Gemini, or Codex CLI, and posts structured comments
-- All from your machine — no CI pipeline, no cloud service, no new accounts
-- Secure by default — can only access repos you already have locally, as secure as your machine
+- Review your team's PRs using Claude, Gemini, or Codex CLI — right from your workstation
+- All local — no CI pipeline, no cloud service, no new accounts
+- Secure by default — only accesses repos you already have cloned locally
 
-> If you already have `claude`, `gemini`, or `codex` CLI and local git clones, you're 5 minutes away from automated code reviews.
+> If you already have `claude`, `gemini`, or `codex` CLI and local git clones, you're 5 minutes away from AI-assisted code reviews.
 
 ## Features
 
 - **Reuses what you already have** — your local git repos, your Claude/Gemini/Codex CLI subscription, your existing credentials. Nothing new to install or pay for.
 - **Full codebase context** — reviews run on your actual local repos, not shallow CI clones. The AI can read any file, follow imports, and understand the full picture.
 - **Fast via git worktrees** — isolated checkouts that share `.git`. No re-cloning. Reviews start in milliseconds.
-- **Parallel reviews** — concurrent PR processing with configurable concurrency. Per-repo git locks, thread-safe SQLite, graceful shutdown.
+- **Parallel reviews** — concurrent PR processing with configurable concurrency. Per-repo git locks, thread-safe SQLite.
 - **Runs real commands** — configure linters, type checkers, and test suites to run during review. Failures are included in the AI's analysis.
 - **Structured output** — severity-tagged findings with inline comments on specific lines and a summary comment.
-- **Daemon or one-shot** — background polling across all repos, or single PR reviews on demand. Dry-run mode to preview.
+- **Batch mode or one-shot** — review a single PR on demand, or run a continuous local review loop across all your repos in an open terminal.
 - **Multi-repo, multi-AI** — different repos can use different AI backends, models, and review instructions.
-- **Smart re-reviews** — new commits on a PR trigger a fresh review; old comments are deleted automatically.
-- **Draft-aware** — daemon skips draft PRs unless the title contains `[review]`, `[claudiu]`, `[ask]`, or `[bot review]`. One-shot `pr` command always reviews regardless of draft status.
+- **Smart re-reviews** — new commits on a PR trigger a fresh review; old comments are cleaned up automatically.
+- **Draft-aware** — in batch mode, drafts are skipped unless the title contains `[review]`, `[claudiu]`, `[ask]`, or `[bot review]`. The `pr` command always reviews regardless of draft status.
 - **Auto-approve** — automatically approves PRs that pass configurable gates (diff size, severity, finding count) and AI-evaluated rules. Shows approval rationale in the summary comment.
 - **Critical tasks** — optionally creates a BitBucket PR task on critical findings to block merge.
 - **Spam protection** — configurable diff size thresholds, cooldowns, and title/author skip patterns.
 - **Auto-sync config** — automatically pulls `.reviewd.yaml` from remote when the working copy is clean.
-- **VPS / headless ready** — runs as a systemd service, no TTY needed. Non-interactive git, graceful shutdown, PID lock, XDG paths, env var substitution for secrets.
 
 ## Quick Start
 
@@ -79,9 +78,9 @@ repos:
 
 Two token types — pick one:
 
-**Option A: Workspace Access Token** (recommended) — acts as a bot identity with workspace-level access:
-1. Go to Settings gear → **Workspace settings** → Security → **[Access tokens](https://bitbucket.org/{workspace}/workspace/settings/access-tokens)**
-2. Create access token with Permissions: Pull requests → Read + Write
+**Option A: Workspace Access Token** (recommended) — workspace-level access:
+1. Go to Settings gear -> **Workspace settings** -> Security -> **[Access tokens](https://bitbucket.org/{workspace}/workspace/settings/access-tokens)**
+2. Create access token with Permissions: Pull requests -> Read + Write
 
 ```yaml
 bitbucket:
@@ -89,8 +88,8 @@ bitbucket:
 ```
 
 **Option B: User API Token** — acts as your personal account:
-1. Create an [API token](https://id.atlassian.com/manage-profile/security/api-tokens) → app: Bitbucket → all scopes
-2. Grant the user access to repos in Workspace settings → User directory
+1. Create an [API token](https://id.atlassian.com/manage-profile/security/api-tokens) -> app: Bitbucket -> all scopes
+2. Grant the user access to repos in Workspace settings -> User directory
 
 ```yaml
 bitbucket:
@@ -115,15 +114,15 @@ Both providers can be used in the same config. Tokens support `${ENV_VAR}` subst
 ### 3. Review
 
 ```bash
-reviewd pr my-project 42           # one-shot
-reviewd pr my-project 42 --dry-run # preview
-reviewd watch -v                   # daemon mode
+reviewd pr my-project 42           # one-shot review
+reviewd pr my-project 42 --dry-run # preview without posting
+reviewd watch -v                   # continuous review loop
 ```
 
 ## How It Works
 
 ```
-Poll API → Check State (SQLite) → Fetch & Worktree → AI Review (Claude/Gemini/Codex) → Parse JSON → Post Comments → Cleanup
+Check API -> State Check (SQLite) -> Fetch & Worktree -> AI Review (Claude/Gemini/Codex) -> Parse JSON -> Post Comments -> Cleanup
 ```
 
 1. Fetches open PRs from GitHub/BitBucket
@@ -228,9 +227,9 @@ All gates must pass — if any one blocks, the PR is not approved. The `rules` f
 
 ```bash
 reviewd init                                  # interactive setup wizard
-reviewd init --sample                         # write sample config (non-interactive)
+reviewd init --sample                         # write sample config (skip wizard)
 reviewd ls                                    # list repos and open PRs
-reviewd watch -v                              # daemon mode
+reviewd watch -v                              # continuous review loop (verbose)
 reviewd watch -v --dry-run                    # preview, no posting
 reviewd watch -v --review-existing            # review not-yet-reviewed open PRs
 reviewd watch --concurrency 8                 # override max concurrent reviews
@@ -241,53 +240,37 @@ reviewd status <repo>                         # review history
 
 ## Architecture
 
-- **Polling, not webhooks** — no tunnel or public endpoint needed
+- **Polling-based** — checks provider APIs on a configurable interval, no webhooks or public endpoints needed
 - **Git worktrees** — near-instant isolated checkouts
-- **Full AI tool access** — the AI reads files, runs commands, explores code
+- **Full AI tool access** — the AI reads files, runs commands, explores code in the worktree
 - **JSON schema** — structured findings, the tool just parses and posts
 - **SQLite state** — WAL mode, thread-safe, tracks `(repo, pr_id, commit)` to avoid duplicates
 - **Provider abstraction** — GitHub and BitBucket, extensible
 
 ## Security
 
-> reviewd gives the AI CLI full tool access in git worktrees on your machine. Only watch repos where you trust the contributors.
+> reviewd gives the AI CLI full tool access in git worktrees on your machine. Only review repos where you trust the contributors.
 
-**Claude CLI (recommended)** runs with the strongest sandboxing:
-- `--print` mode — non-interactive with full agentic tool access (file reading, bash commands, grep, glob). The AI explores the worktree autonomously and returns text.
-- `--disallowedTools Write,Edit` — surgically blocks file modification tools while keeping read/execute tools available. This is tool-level enforcement that the AI cannot bypass.
+**Claude CLI** runs with the strongest sandboxing:
+- `--print` mode — standard CLI output mode with full read and analysis capabilities (file reading, commands, grep, glob). The AI explores the worktree and returns structured text.
+- `--disallowedTools Write,Edit` — blocks file modification tools while keeping read/execute tools available. This is tool-level enforcement that the AI cannot bypass.
 - `--mcp-config '{"mcpServers":{}}' --strict-mcp-config` — disables all MCP servers, preventing external tool access
 - `CLAUDECODE` env var is unset — prevents nested Claude Code sessions
 
 **Gemini CLI** runs with `--approval-mode yolo` (no confirmation prompts). This means Gemini can execute commands and modify files in the worktree during review. Mitigated by:
-- `-e none` — disables all extensions (no web access, no file tools beyond built-in)
+- `-e none` — disables all extensions (no web access, no additional tools)
 - Inherently less sandboxed than Claude since there's no tool-level write blocking
 
-**Codex CLI** runs with `codex exec` (non-interactive agent mode):
+**Codex CLI** runs with `codex exec` (agent mode):
 - `--sandbox workspace-write` — OS-level sandbox restricting operations to the working directory
-- `exec` is inherently non-interactive — no approval prompts
 - No equivalent of Claude's `--disallowedTools` — the sandbox allows file writes within the workdir. Since reviews run in disposable worktrees, this is harmless (the worktree is deleted after each review).
 
 **General mitigations (all CLIs):**
 - Reviews run in isolated git worktrees, not your working copy — any file modifications are discarded
-- The prompt includes a mandatory security scope block (placed before any user-controlled content) forbidding file writes, network access, and secret access
+- The prompt includes a security scope block (placed before any user-controlled content) forbidding file writes, network access, and secret access
 - Per-project config (`.reviewd.yaml`) is read from the main repo, not the worktree — PR authors can't inject instructions via config changes
 - `test_commands` come only from the repo owner's config, not from PR content
 - Prompt injection attempts in code under review are flagged as security findings
-
-## Headless / VPS Deployment
-
-reviewd runs fully headless — no TTY, no interactive prompts. Deploy it on a VPS alongside your AI CLI and forget about it.
-
-- **`reviewd init --sample`** — writes an annotated config template without prompts. No TTY required.
-- **`GIT_TERMINAL_PROMPT=0`** on all git operations — git fails fast instead of hanging waiting for a password.
-- **`-v` flag** — disables the terminal status line. Output becomes clean newline-separated log lines, suitable for journald or any log collector.
-- **Signal handling** — SIGTERM/SIGINT trigger graceful shutdown: in-progress reviews finish, worktrees are cleaned up, state DB is closed. Works with systemd `Type=simple`.
-- **PID lock** — prevents duplicate instances (`~/.local/share/reviewd/reviewd.pid`).
-- **XDG paths** — config, state, and cache directories respect `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`.
-- **`${ENV_VAR}` substitution** in config — keep tokens in environment variables or secrets managers instead of plaintext YAML.
-- **Per-project config auto-pulls** — `.reviewd.yaml` is re-read on every review cycle and auto-pulled from remote if the working copy is clean. Push config changes and they take effect without restarting.
-- **Global config** is loaded once at startup — restart the service after changes. Per-project `.reviewd.yaml` files are hot-reloaded.
-- **All AI CLIs work headless** — Claude `--print`, Gemini `--approval-mode yolo -e none`, Codex `exec --sandbox workspace-write`.
 
 ## Roadmap
 
