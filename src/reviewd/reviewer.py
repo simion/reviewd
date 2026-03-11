@@ -85,14 +85,18 @@ def create_worktree(repo_path: str, pr: PRInfo) -> str:
             env=_GIT_ENV,
         )
         if fetch_result.returncode != 0:
-            logger.warning('Source branch fetch failed, fetching destination only')
-            subprocess.run(
+            logger.warning('Source branch fetch failed: %s', fetch_result.stderr.decode().strip())
+            dest_result = subprocess.run(
                 ['git', 'fetch', 'origin', pr.destination_branch],
                 cwd=repo_path,
-                check=True,
                 capture_output=True,
                 env=_GIT_ENV,
             )
+            if dest_result.returncode != 0:
+                raise RuntimeError(
+                    f'Cannot fetch destination branch {pr.destination_branch}: '
+                    f'{dest_result.stderr.decode().strip()}'
+                )
 
         # Use branch ref if available, otherwise the commit hash (must exist locally)
         checkout_ref = f'origin/{pr.source_branch}'
