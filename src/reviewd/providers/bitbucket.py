@@ -23,14 +23,16 @@ class BitbucketProvider(GitProvider):
         # auth_token can be "email:token" (Basic auth) or a plain OAuth token (Bearer)
         if _BASIC_AUTH_RE.match(auth_token):
             email, token = auth_token.split(':', 1)
-            auth = (email, token)
+            self._auth: httpx._types.AuthTypes | None = (email, token)
+            self._bearer: str | None = None
             headers = {'Content-Type': 'application/json'}
         else:
-            auth = None
-            headers = {'Authorization': f'Bearer {auth_token}', 'Content-Type': 'application/json'}
+            self._auth = None
+            self._bearer = f'Bearer {auth_token}'
+            headers = {'Authorization': self._bearer, 'Content-Type': 'application/json'}
         self.client = httpx.Client(
             base_url=BB_API_BASE,
-            auth=auth,
+            auth=self._auth,
             headers=headers,
             timeout=30,
         )
@@ -126,17 +128,12 @@ class BitbucketProvider(GitProvider):
         return False
 
     def approve_pr(self, repo_slug: str, pr_id: int) -> bool:
-        url = f'/repositories/{self.workspace}/{repo_slug}/pullrequests/{pr_id}/approve'
-        resp = self.client.post(url)
+        # Standalone request — BB approve endpoint returns 400 with Content-Type header
+        url = f'{BB_API_BASE}/repositories/{self.workspace}/{repo_slug}/pullrequests/{pr_id}/approve'
+        headers = {'Authorization': self._bearer} if self._bearer else {}
+        resp = httpx.post(url, auth=self._auth, headers=headers, timeout=30)
         if resp.status_code == 400:
-            cred_type = resp.headers.get('x-credential-type', 'unknown')
-            if 'access_token' in cred_type:
-                logger.warning(
-                    'Cannot approve PR #%d: workspace access tokens cannot approve PRs — use an app password instead',
-                    pr_id,
-                )
-            else:
-                logger.warning('Cannot approve PR #%d: %s', pr_id, resp.text[:200])
+            logger.warning('Cannot approve PR #%d: %s', pr_id, resp.text[:500])
             return False
         if resp.status_code >= 400:
             logger.error(

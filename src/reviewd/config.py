@@ -210,7 +210,7 @@ _GIT_ENV = {**os.environ, 'GIT_TERMINAL_PROMPT': '0'}
 def _sync_project_config(repo: Path):
     """Auto-pull if .reviewd.yaml changed on remote and working copy is clean."""
     # Fetch latest
-    subprocess.run(['git', 'fetch', '--quiet'], cwd=repo, capture_output=True, env=_GIT_ENV)
+    subprocess.run(['git', 'fetch', '--quiet'], cwd=repo, capture_output=True, env=_GIT_ENV, timeout=120)
 
     # Check if local working copy is clean
     status = subprocess.run(
@@ -218,6 +218,7 @@ def _sync_project_config(repo: Path):
         cwd=repo,
         capture_output=True,
         text=True,
+        timeout=30,
     )
     if status.returncode != 0 or status.stdout.strip():
         return
@@ -228,6 +229,7 @@ def _sync_project_config(repo: Path):
         cwd=repo,
         capture_output=True,
         text=True,
+        timeout=10,
     )
     if behind.returncode != 0 or behind.stdout.strip() == '0':
         return
@@ -238,6 +240,7 @@ def _sync_project_config(repo: Path):
         capture_output=True,
         text=True,
         env=_GIT_ENV,
+        timeout=120,
     )
     if result.returncode == 0:
         _config_logger.info('Auto-pulled %s', repo.name)

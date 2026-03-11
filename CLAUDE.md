@@ -1,21 +1,6 @@
 # CLAUDE.md — reviewd
 
-## What This Is
-
-Local CLI tool that polls GitHub/BitBucket for open PRs, reviews them using Claude/Gemini/Codex CLI, and posts structured comments back. Invokes `claude --print`, `gemini -p`, or `codex exec` as local subprocesses — no API keys, uses existing CLI subscriptions.
-
-## Architecture
-
-```
-Poller (GitHub/BB API) → State Check (SQLite) → Worktree (git) → AI Review (CLI) → Parse JSON → Post Comments
-```
-
-- **Polling**, not webhooks — runs locally, no tunnel needed
-- **Git worktrees** for isolation — no interference with working copy
-- **AI has full tool access** — reads files, explores code, runs commands in the worktree
-- **JSON output** — prompt requests structured JSON as last block, extracted via regex
-- **SQLite** for state — tracks `(repo, pr_id, source_commit)` to avoid duplicate reviews
-- **ID-based comment cleanup** — tracks posted comment IDs in SQLite, deletes by ID on re-review
+Local AI code review daemon for GitHub/BitBucket PRs. See README.md for full docs.
 
 ## Project Conventions
 
@@ -26,6 +11,7 @@ Poller (GitHub/BB API) → State Check (SQLite) → Worktree (git) → AI Review
 - No unnecessary docstrings or comments
 - Tests only when explicitly asked
 - Never add Co-Authored-By to commits
+- Only commit or release when explicitly asked
 
 ## Key Files
 
@@ -42,59 +28,6 @@ Poller (GitHub/BB API) → State Check (SQLite) → Worktree (git) → AI Review
 | `src/reviewd/providers/base.py` | Abstract GitProvider ABC |
 | `src/reviewd/providers/bitbucket.py` | BitBucket 2.0 API (httpx, pagination with ID dedup, inline comments) |
 | `src/reviewd/providers/github.py` | GitHub REST API v3 (httpx, Link header pagination, review comments) |
-
-## Config
-
-### Global: `~/.config/reviewd/config.yaml`
-
-Provider credentials, repos list, poll interval, AI CLI choice, model, cli_args, cli_defaults, global `instructions`, `review_title`, `footer`.
-
-### Per-project: `{repo_root}/.reviewd.yaml`
-
-Project-specific `instructions`, `test_commands`, `inline_comments_for`, `auto_approve`, `critical_task`.
-
-Instructions merge: global + per-project concatenated (global first). Old `guidelines`/`explore` fields still supported.
-
-### Per-repo overrides in global config
-
-`cli`, `model`, `repo_slug` (decouples display name from API slug), per-repo provider credentials.
-
-## How the Review Works
-
-1. Fetch PR metadata from provider API
-2. Clean up stale worktrees from previous interrupted runs
-3. Create git worktree at `{repo}/.reviewd-worktrees/pr-{id}`
-4. Build prompt: PR metadata + merged instructions + validation commands + JSON schema
-5. Run `claude --print -p "<prompt>"`, `gemini -p "<prompt>"`, or `codex exec - < prompt` via Popen
-6. Stream stderr for progress, ticker thread logs elapsed time every 30s
-7. Extract last ```json``` block from stdout (falls back to raw JSON object for CLIs that don't output fenced blocks)
-8. Delete old bot comments by tracked IDs from SQLite
-9. Post inline comments (single-line, with `suggestion` code fence) + summary comment
-10. Cleanup worktree
-
-## CLI
-
-```bash
-reviewd init                                  # set up global + project config
-reviewd ls                                    # list repos + open PRs
-reviewd watch -v                              # daemon mode
-reviewd watch -v --review-existing            # review not-yet-reviewed open PRs
-reviewd watch -v --cli gemini                 # override AI CLI
-reviewd pr pydpf 42                           # one-shot review (reviews drafts too)
-reviewd pr pydpf 42 --dry-run                 # preview without posting
-reviewd pr pydpf 42 --force                   # re-review even if already done
-reviewd pr pydpf 42 --cli codex               # override AI CLI
-reviewd status pydpf                          # review history
-```
-
-## Prompt Injection Defenses
-
-- Prompt includes a security scope block (before any user-controlled content) that forbids file writes, network access, accessing secrets, and following instructions embedded in code
-- Claude CLI: `--disallowedTools Write,Edit` + empty MCP config + `CLAUDECODE` env var unset
-- Gemini CLI: `-e none` disables all extensions
-- Codex CLI: `--sandbox workspace-write` restricts to worktree directory
-- Project config (`.reviewd.yaml`) is read from the main repo, not the worktree — PR authors cannot inject instructions via config
-- `test_commands` come only from the repo owner's config, not from PR content
 
 ## Releasing
 

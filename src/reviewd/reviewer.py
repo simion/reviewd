@@ -35,9 +35,17 @@ _active_procs_lock = threading.Lock()
 
 def terminate_all():
     with _active_procs_lock:
-        for proc in _active_procs:
+        procs = list(_active_procs)
+    for proc in procs:
+        with contextlib.suppress(OSError):
+            proc.terminate()
+    # Give processes a moment to die, then force-kill survivors
+    for proc in procs:
+        try:
+            proc.wait(timeout=3)
+        except subprocess.TimeoutExpired:
             with contextlib.suppress(OSError):
-                proc.terminate()
+                proc.kill()
 
 
 def cleanup_stale_worktrees(repo_path: str):
@@ -61,6 +69,7 @@ def cleanup_stale_worktrees(repo_path: str):
             cwd=repo_path,
             capture_output=True,
             env=_GIT_ENV,
+            timeout=30,
         )
         if result.returncode == 0:
             logger.info('Cleaned up stale worktree: %s', entry.name)
@@ -83,6 +92,7 @@ def create_worktree(repo_path: str, pr: PRInfo) -> str:
             cwd=repo_path,
             capture_output=True,
             env=_GIT_ENV,
+            timeout=120,
         )
         if fetch_result.returncode != 0:
             logger.warning('Source branch fetch failed: %s', fetch_result.stderr.decode().strip())
@@ -91,6 +101,7 @@ def create_worktree(repo_path: str, pr: PRInfo) -> str:
                 cwd=repo_path,
                 capture_output=True,
                 env=_GIT_ENV,
+                timeout=120,
             )
             if dest_result.returncode != 0:
                 raise RuntimeError(
@@ -105,6 +116,7 @@ def create_worktree(repo_path: str, pr: PRInfo) -> str:
             cwd=repo_path,
             capture_output=True,
             env=_GIT_ENV,
+            timeout=10,
         )
         if ref_check.returncode != 0:
             checkout_ref = pr.source_commit
@@ -115,6 +127,7 @@ def create_worktree(repo_path: str, pr: PRInfo) -> str:
             check=True,
             capture_output=True,
             env=_GIT_ENV,
+            timeout=30,
         )
 
     if not worktree_dir.exists():
@@ -132,6 +145,7 @@ def cleanup_worktree(repo_path: str, pr: PRInfo):
                 cwd=repo_path,
                 capture_output=True,
                 env=_GIT_ENV,
+                timeout=30,
             )
         logger.info('Cleaned up worktree at %s', worktree_dir)
 
@@ -143,12 +157,14 @@ def get_diff_lines(repo_path: str, pr: PRInfo) -> int:
             cwd=repo_path,
             capture_output=True,
             env=_GIT_ENV,
+            timeout=120,
         )
     result = subprocess.run(
         ['git', 'diff', '--shortstat', f'origin/{pr.destination_branch}...origin/{pr.source_branch}'],
         cwd=repo_path,
         capture_output=True,
         text=True,
+        timeout=30,
     )
     if result.returncode != 0:
         logger.warning('Could not compute diff size for PR #%d, proceeding anyway', pr.pr_id)

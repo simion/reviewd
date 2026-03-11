@@ -276,83 +276,18 @@ reviewd status <repo>                         # review history
 
 ## Headless / VPS Deployment
 
-reviewd runs fully headless — no TTY, no interactive prompts in the daemon path. Deploy it on a VPS alongside your AI CLI and forget about it.
-
-### Quick setup
-
-```bash
-# 1. Install
-pip install reviewd
-
-# 2. Write sample config (non-interactive, no wizard)
-reviewd init --sample
-
-# 3. Edit config — add tokens, repos, paths
-vim ~/.config/reviewd/config.yaml
-
-# 4. Clone repos with deploy keys
-git clone git@github.com:org/repo.git ~/repos/repo
-
-# 5. Run as daemon
-reviewd watch -v
-```
-
-### What makes it VPS-ready
+reviewd runs fully headless — no TTY, no interactive prompts. Deploy it on a VPS alongside your AI CLI and forget about it.
 
 - **`reviewd init --sample`** — writes an annotated config template without prompts. No TTY required.
-- **`GIT_TERMINAL_PROMPT=0`** on all git operations — if SSH keys or credentials aren't set up, git fails fast instead of hanging waiting for a password.
-- **`-v` flag** — disables the terminal status line (carriage returns, ANSI escape codes). Output becomes clean newline-separated log lines, suitable for journald or any log collector.
+- **`GIT_TERMINAL_PROMPT=0`** on all git operations — git fails fast instead of hanging waiting for a password.
+- **`-v` flag** — disables the terminal status line. Output becomes clean newline-separated log lines, suitable for journald or any log collector.
 - **Signal handling** — SIGTERM/SIGINT trigger graceful shutdown: in-progress reviews finish, worktrees are cleaned up, state DB is closed. Works with systemd `Type=simple`.
 - **PID lock** — prevents duplicate instances (`~/.local/share/reviewd/reviewd.pid`).
-- **XDG paths** — config, state, and cache directories respect `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`. Deploy to any user/path.
+- **XDG paths** — config, state, and cache directories respect `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_CACHE_HOME`.
 - **`${ENV_VAR}` substitution** in config — keep tokens in environment variables or secrets managers instead of plaintext YAML.
 - **Per-project config auto-pulls** — `.reviewd.yaml` is re-read on every review cycle and auto-pulled from remote if the working copy is clean. Push config changes and they take effect without restarting.
-- **Claude `--print` works headless** — no TTY needed, reads prompt from stdin, writes to stdout/stderr.
-- **Gemini `--approval-mode yolo -e none`** — no approval prompts, no extensions, fully non-interactive.
-- **Codex `exec --sandbox workspace-write`** — non-interactive agent mode, no TTY needed.
-
-### systemd service example
-
-```ini
-[Unit]
-Description=reviewd — AI code review daemon
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=reviewd
-ExecStart=/usr/local/bin/reviewd watch -v
-Restart=on-failure
-RestartSec=30
-Environment=XDG_CONFIG_HOME=/home/reviewd/.config
-Environment=XDG_DATA_HOME=/home/reviewd/.local/share
-
-[Install]
-WantedBy=multi-user.target
-```
-
-### Deploy key setup
-
-```bash
-# Generate a deploy key per repo
-ssh-keygen -t ed25519 -f ~/.ssh/repo_deploy_key -N ""
-
-# Add public key to GitHub/BitBucket as a deploy key (read-only is fine)
-# Configure SSH to use it
-cat >> ~/.ssh/config <<EOF
-Host github.com
-  IdentityFile ~/.ssh/repo_deploy_key
-  IdentitiesOnly yes
-EOF
-
-# Test non-interactive access
-GIT_TERMINAL_PROMPT=0 git fetch origin
-```
-
-### Global config changes require restart
-
-The global config (`~/.config/reviewd/config.yaml`) is loaded once at startup. If you change poll interval, add repos, or rotate tokens, restart the service. Per-project `.reviewd.yaml` files are hot-reloaded on every review cycle.
+- **Global config** is loaded once at startup — restart the service after changes. Per-project `.reviewd.yaml` files are hot-reloaded.
+- **All AI CLIs work headless** — Claude `--print`, Gemini `--approval-mode yolo -e none`, Codex `exec --sandbox workspace-write`.
 
 ## Roadmap
 

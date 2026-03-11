@@ -294,6 +294,9 @@ def _build_global_config_yaml(
     lines.append('#   Be concise and constructive.')
     lines.append('#   Every issue must include a concrete suggested fix.')
     lines.append('')
+    lines.append('# review_title: "review\'d by {cli}"')
+    lines.append('# footer: "Automated review by review\'d"')
+    lines.append('')
     lines.append('# skip_title_patterns: ["[no-review]", "[wip]"]')
     lines.append('# skip_authors: []')
     lines.append('')
@@ -394,6 +397,9 @@ cli: claude                           # claude, gemini, or codex
 # instructions: |
 #   Be concise and constructive.
 #   Every issue must include a concrete suggested fix.
+
+# review_title: "review'd by {cli}"
+# footer: "Automated review by review'd"
 
 # skip_title_patterns: ["[no-review]", "[wip]"]
 # skip_authors: []
