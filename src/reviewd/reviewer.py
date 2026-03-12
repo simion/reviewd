@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import signal
 import subprocess
 import tempfile
 import threading
@@ -38,14 +39,15 @@ def terminate_all():
         procs = list(_active_procs)
     for proc in procs:
         with contextlib.suppress(OSError):
-            proc.terminate()
+            # Kill entire process group (subprocess is session leader)
+            os.killpg(proc.pid, signal.SIGTERM)
     # Give processes a moment to die, then force-kill survivors
     for proc in procs:
         try:
             proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
             with contextlib.suppress(OSError):
-                proc.kill()
+                os.killpg(proc.pid, signal.SIGKILL)
 
 
 def cleanup_stale_worktrees(repo_path: str):
@@ -304,11 +306,12 @@ def invoke_cli(
             proc = subprocess.Popen(
                 cmd,
                 cwd=cwd,
-                stdin=subprocess.PIPE if stdin_input else None,
+                stdin=subprocess.PIPE if stdin_input else subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
                 env=env,
+                start_new_session=True,
             )
             with _active_procs_lock:
                 _active_procs.add(proc)

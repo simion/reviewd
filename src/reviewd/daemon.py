@@ -5,6 +5,7 @@ import logging
 import os
 import signal
 import sys
+import termios
 import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -333,13 +334,28 @@ def run_poll_loop(
 
     logger.info('Polling every %ds, max %d concurrent reviews (dry_run=%s)', poll_interval, max_workers, dry_run)
 
+    # Save terminal settings so we can restore after subprocesses corrupt them
+    _saved_termios = None
+    try:
+        _saved_termios = termios.tcgetattr(sys.stdin.fileno())
+    except (termios.error, ValueError, OSError):
+        pass
+
     executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix='review')
     futures: dict[Future, PRInfo] = {}
 
     _force_quit = False
 
+    def _restore_terminal():
+        if _saved_termios is not None:
+            try:
+                termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, _saved_termios)
+            except (termios.error, ValueError, OSError):
+                pass
+
     def _handle_shutdown(_signum, _frame):
         nonlocal _force_quit
+        _restore_terminal()
         if _shutdown_event.is_set():
             _force_quit = True
             sys.stderr.write(f'\n{YELLOW}Force quit — killing all reviews...{RESET}\n')
@@ -438,6 +454,7 @@ def run_poll_loop(
         else:
             executor.shutdown(wait=False, cancel_futures=True)
         _status('', clear=True)
+        _restore_terminal()
         _release_pid_lock(lock_path)
         state_db.close()
 
