@@ -275,41 +275,57 @@ def _collect_eligible_prs(
     return eligible
 
 
+_MAX_FETCH_WORKERS = 4
+
+
+@_retry_on_network_error()
+def _fetch_repo_prs(repo_config: RepoConfig, global_config: GlobalConfig) -> list[PRInfo]:
+    provider = get_provider(global_config, repo_config)
+    return provider.list_open_prs(repo_config.slug)
+
+
 def _boot_summary(global_config: GlobalConfig, state_db: StateDB, review_existing: bool):
-    for repo_config in global_config.repos:
-        provider = get_provider(global_config, repo_config)
-        prs = provider.list_open_prs(repo_config.slug)
-        logger.info(
-            f'Watching {GREEN}%s{RESET} (%s, %s) — %d open PRs',
-            repo_config.name,
-            repo_config.provider,
-            repo_config.cli.value,
-            len(prs),
-        )
-        skipped = 0
-        reviewed = 0
-        drafts = 0
-        for pr in prs:
-            if pr.draft and not _has_review_tag(pr.title):
-                logger.info(f'  {DIM}⏸ #%d  %s  (%s) — draft{RESET}', pr.pr_id, pr.title, pr.author)
-                drafts += 1
+    with ThreadPoolExecutor(max_workers=_MAX_FETCH_WORKERS, thread_name_prefix='fetch') as fetch_pool:
+        repo_futures = [(rc, fetch_pool.submit(_fetch_repo_prs, rc, global_config)) for rc in global_config.repos]
+        for repo_config, future in repo_futures:
+            try:
+                prs = future.result()
+            except Exception:
+                logger.exception('Failed to fetch PRs for %s', repo_config.name)
                 continue
-            already_reviewed = state_db.has_review(pr.repo_slug, pr.pr_id, pr.source_commit)
-            if already_reviewed:
-                logger.info(f'  ✓ #%d  {WHITE}%s{RESET}  (%s)', pr.pr_id, pr.title, pr.author)
-                reviewed += 1
-            elif review_existing:
-                logger.info('  • #%d  %s  (%s) — will review', pr.pr_id, pr.title, pr.author)
-            else:
-                logger.info('  ⏭ #%d  %s  (%s) — skipping', pr.pr_id, pr.title, pr.author)
-                state_db.start_review(pr.repo_slug, pr.pr_id, pr.source_commit)
-                state_db.finish_review(pr.repo_slug, pr.pr_id, pr.source_commit)
-                skipped += 1
-        if skipped:
+            if not prs:
+                prs = []
             logger.info(
-                f'  {YELLOW}%d not yet reviewed — use --review-existing to include them{RESET}',
-                skipped,
+                f'Watching {GREEN}%s{RESET} (%s, %s) — %d open PRs',
+                repo_config.name,
+                repo_config.provider,
+                repo_config.cli.value,
+                len(prs),
             )
+            skipped = 0
+            reviewed = 0
+            drafts = 0
+            for pr in prs:
+                if pr.draft and not _has_review_tag(pr.title):
+                    logger.info(f'  {DIM}⏸ #%d  %s  (%s) — draft{RESET}', pr.pr_id, pr.title, pr.author)
+                    drafts += 1
+                    continue
+                already_reviewed = state_db.has_review(pr.repo_slug, pr.pr_id, pr.source_commit)
+                if already_reviewed:
+                    logger.info(f'  ✓ #%d  {WHITE}%s{RESET}  (%s)', pr.pr_id, pr.title, pr.author)
+                    reviewed += 1
+                elif review_existing:
+                    logger.info('  • #%d  %s  (%s) — will review', pr.pr_id, pr.title, pr.author)
+                else:
+                    logger.info('  ⏭ #%d  %s  (%s) — skipping', pr.pr_id, pr.title, pr.author)
+                    state_db.start_review(pr.repo_slug, pr.pr_id, pr.source_commit)
+                    state_db.finish_review(pr.repo_slug, pr.pr_id, pr.source_commit)
+                    skipped += 1
+            if skipped:
+                logger.info(
+                    f'  {YELLOW}%d not yet reviewed — use --review-existing to include them{RESET}',
+                    skipped,
+                )
 
 
 def run_poll_loop(
@@ -341,6 +357,7 @@ def run_poll_loop(
         _saved_termios = termios.tcgetattr(sys.stdin.fileno())
 
     executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix='review')
+    fetch_pool = ThreadPoolExecutor(max_workers=_MAX_FETCH_WORKERS, thread_name_prefix='fetch')
     futures: dict[Future, PRInfo] = {}
 
     _force_quit = False
@@ -380,13 +397,18 @@ def run_poll_loop(
         while not _shutdown_event.is_set():
             now = datetime.now().strftime('%H:%M:%S')
 
-            # Collect eligible PRs from all repos
+            # Collect eligible PRs from all repos in parallel
             all_eligible = []
-            for i, repo_config in enumerate(global_config.repos, 1):
-                _status(f'[{now}] Checking {repo_config.name} ({i}/{total_repos})')
+            _status(f'[{now}] Checking {total_repos} repos')
+            repo_fetch_futures = [
+                (rc, fetch_pool.submit(_collect_eligible_prs, rc, global_config, state_db))
+                for rc in global_config.repos
+            ]
+            for repo_config, future in repo_fetch_futures:
                 try:
-                    eligible = _collect_eligible_prs(repo_config, global_config, state_db)
-                    all_eligible.extend(eligible)
+                    eligible = future.result()
+                    if eligible:
+                        all_eligible.extend(eligible)
                 except SystemExit:
                     raise
                 except httpx.HTTPStatusError as e:
@@ -446,6 +468,7 @@ def run_poll_loop(
     finally:
         _shutdown_event.set()
         terminate_all()
+        fetch_pool.shutdown(wait=False, cancel_futures=True)
         if not _force_quit:
             executor.shutdown(wait=True, cancel_futures=True)
         else:
