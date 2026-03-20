@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import signal
 import subprocess
 import tempfile
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 JSON_BLOCK_PATTERN = re.compile(r'```json\s*\n(.*?)\n\s*```', re.DOTALL)
 DEFAULT_TIMEOUT = 600
-_GIT_ENV = {**os.environ, 'GIT_TERMINAL_PROMPT': '0'}
+_GIT_ENV = {**os.environ, 'GIT_TERMINAL_PROMPT': '0', 'GIT_LFS_SKIP_SMUDGE': '1'}
 
 _repo_locks: defaultdict[str, threading.Lock] = defaultdict(threading.Lock)
 _active_procs: set[subprocess.Popen] = set()
@@ -123,14 +124,59 @@ def create_worktree(repo_path: str, pr: PRInfo) -> str:
         if ref_check.returncode != 0:
             checkout_ref = pr.source_commit
 
-        subprocess.run(
-            ['git', 'worktree', 'add', str(worktree_dir), checkout_ref, '--detach'],
+        wt_result = subprocess.run(
+            [
+                'git',
+                '-c',
+                'filter.git-crypt.smudge=cat',
+                '-c',
+                'filter.git-crypt.required=false',
+                'worktree',
+                'add',
+                str(worktree_dir),
+                checkout_ref,
+                '--detach',
+            ],
             cwd=repo_path,
-            check=True,
             capture_output=True,
             env=_GIT_ENV,
             timeout=30,
         )
+        if wt_result.returncode != 0:
+            stderr = wt_result.stderr.decode().strip()
+            # Stale worktree reference — prune and retry once
+            if 'already registered' in stderr or 'already exists' in stderr:
+                logger.warning('Stale worktree for PR #%d, pruning and retrying', pr.pr_id)
+                subprocess.run(
+                    ['git', 'worktree', 'prune'],
+                    cwd=repo_path,
+                    capture_output=True,
+                    env=_GIT_ENV,
+                    timeout=30,
+                )
+                if worktree_dir.exists():
+                    shutil.rmtree(worktree_dir, ignore_errors=True)
+                subprocess.run(
+                    [
+                        'git',
+                        '-c',
+                        'filter.git-crypt.smudge=cat',
+                        '-c',
+                        'filter.git-crypt.required=false',
+                        'worktree',
+                        'add',
+                        str(worktree_dir),
+                        checkout_ref,
+                        '--detach',
+                    ],
+                    cwd=repo_path,
+                    check=True,
+                    capture_output=True,
+                    env=_GIT_ENV,
+                    timeout=30,
+                )
+            else:
+                raise RuntimeError(f'git worktree add failed for PR #{pr.pr_id}: {stderr}')
 
     if not worktree_dir.exists():
         raise RuntimeError(f'Worktree creation succeeded but directory does not exist: {worktree_dir}')
