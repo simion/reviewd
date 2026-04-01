@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 import httpx
 
@@ -25,12 +26,34 @@ class GithubProvider(GitProvider):
             timeout=30,
         )
 
+    def _request(self, method: str, url: str, **kwargs) -> httpx.Response:
+        max_retries = 3
+        for attempt in range(max_retries + 1):
+            resp = self.client.request(method, url, **kwargs)
+            if resp.status_code != 429 or attempt == max_retries:
+                resp.raise_for_status()
+                return resp
+            retry_after = int(resp.headers.get('Retry-After', 2**attempt))
+            logger.warning('Rate limited (429), retrying in %ds (attempt %d/%d)', retry_after, attempt + 1, max_retries)
+            time.sleep(retry_after)
+        return resp  # unreachable
+
+    def _request_raw(self, method: str, url: str, **kwargs) -> httpx.Response:
+        max_retries = 3
+        for attempt in range(max_retries + 1):
+            resp = self.client.request(method, url, **kwargs)
+            if resp.status_code != 429 or attempt == max_retries:
+                return resp
+            retry_after = int(resp.headers.get('Retry-After', 2**attempt))
+            logger.warning('Rate limited (429), retrying in %ds (attempt %d/%d)', retry_after, attempt + 1, max_retries)
+            time.sleep(retry_after)
+        return resp  # unreachable
+
     def _paginate(self, url: str, params: dict | None = None) -> list[dict]:
         results = []
         params = params or {}
         while True:
-            resp = self.client.get(url, params=params)
-            resp.raise_for_status()
+            resp = self._request('GET', url, params=params)
             results.extend(resp.json())
             link = resp.headers.get('link', '')
             next_url = _parse_next_link(link)
@@ -60,8 +83,7 @@ class GithubProvider(GitProvider):
 
     def get_pr(self, repo_slug: str, pr_id: int) -> PRInfo:
         url = f'/repos/{repo_slug}/pulls/{pr_id}'
-        resp = self.client.get(url)
-        resp.raise_for_status()
+        resp = self._request('GET', url)
         return self._pr_from_data(repo_slug, resp.json())
 
     def post_comment(
@@ -80,8 +102,7 @@ class GithubProvider(GitProvider):
         if file_path is not None:
             commit_id = source_commit
             if not commit_id:
-                pr_resp = self.client.get(f'/repos/{repo_slug}/pulls/{pr_id}')
-                pr_resp.raise_for_status()
+                pr_resp = self._request('GET', f'/repos/{repo_slug}/pulls/{pr_id}')
                 commit_id = pr_resp.json()['head']['sha']
 
             url = f'/repos/{repo_slug}/pulls/{pr_id}/comments'
@@ -101,19 +122,18 @@ class GithubProvider(GitProvider):
             url = f'/repos/{repo_slug}/issues/{pr_id}/comments'
             payload = {'body': marked_body}
 
-        resp = self.client.post(url, json=payload)
-        resp.raise_for_status()
+        resp = self._request('POST', url, json=payload)
         comment_id = resp.json()['id']
         logger.info('Posted comment %d on PR #%d', comment_id, pr_id)
         return comment_id
 
     def delete_comment(self, repo_slug: str, pr_id: int, comment_id: int) -> bool:
         # Try issue comment first, then review comment
-        resp = self.client.delete(f'/repos/{repo_slug}/issues/comments/{comment_id}')
+        resp = self._request_raw('DELETE', f'/repos/{repo_slug}/issues/comments/{comment_id}')
         if resp.status_code == 204:
             logger.info('Deleted issue comment %d on PR #%d', comment_id, pr_id)
             return True
-        resp = self.client.delete(f'/repos/{repo_slug}/pulls/comments/{comment_id}')
+        resp = self._request_raw('DELETE', f'/repos/{repo_slug}/pulls/comments/{comment_id}')
         if resp.status_code == 204:
             logger.info('Deleted review comment %d on PR #%d', comment_id, pr_id)
             return True
@@ -122,7 +142,7 @@ class GithubProvider(GitProvider):
 
     def approve_pr(self, repo_slug: str, pr_id: int) -> bool:
         url = f'/repos/{repo_slug}/pulls/{pr_id}/reviews'
-        resp = self.client.post(url, json={'event': 'APPROVE'})
+        resp = self._request_raw('POST', url, json={'event': 'APPROVE'})
         if resp.status_code == 422:
             logger.warning('Cannot approve PR #%d (likely self-approve): %s', pr_id, resp.text[:200])
             return False

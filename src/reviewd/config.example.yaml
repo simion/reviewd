@@ -88,6 +88,11 @@
 #   Be concise and constructive.
 #   Every issue must include a concrete suggested fix.
 
+# Global default for which severities get inline comments (rest go in summary).
+# Per-project .reviewd.yaml overrides this.
+# inline_comments_for:
+#   - critical
+
 # --- PR filtering ---
 
 # Skip PRs whose title contains any of these patterns (case-insensitive)
@@ -104,9 +109,6 @@
 # skip_severities:              # exclude severities from the review entirely
 #   - nitpick                   #   (also removes them from the prompt)
 #   - good                      #   options: critical, suggestion, nitpick, good
-# inline_comments_for:          # which severities get inline comments
-#   - critical
-#   - suggestion
 # max_inline_comments: 5        # if exceeded, skip all inline (null = unlimited)
 # show_overview: false           # show AI overview paragraph in summary comment
 # min_diff_lines: 0             # skip initial PR review if fewer changed lines (0 = disabled)

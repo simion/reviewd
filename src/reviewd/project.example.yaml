@@ -16,7 +16,7 @@
 
 # Severity filtering
 # skip_severities: [nitpick]        # options: critical, suggestion, nitpick, good
-# inline_comments_for: [critical]   # rest goes in summary
+# inline_comments_for: [critical]   # rest goes in summary (overrides global)
 
 # max_inline_comments: 5            # skip all inline if exceeded
 # show_overview: false               # show AI overview in summary comment

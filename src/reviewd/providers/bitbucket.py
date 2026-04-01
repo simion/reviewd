@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 
 import httpx
 
@@ -37,6 +38,30 @@ class BitbucketProvider(GitProvider):
             timeout=30,
         )
 
+    def _request(self, method: str, url: str, **kwargs) -> httpx.Response:
+        max_retries = 3
+        for attempt in range(max_retries + 1):
+            resp = self.client.request(method, url, **kwargs)
+            if resp.status_code != 429 or attempt == max_retries:
+                resp.raise_for_status()
+                return resp
+            retry_after = int(resp.headers.get('Retry-After', 2**attempt))
+            logger.warning('Rate limited (429), retrying in %ds (attempt %d/%d)', retry_after, attempt + 1, max_retries)
+            time.sleep(retry_after)
+        return resp  # unreachable, but keeps type checkers happy
+
+    def _request_raw(self, method: str, url: str, **kwargs) -> httpx.Response:
+        """Like _request but without raise_for_status — caller handles status codes."""
+        max_retries = 3
+        for attempt in range(max_retries + 1):
+            resp = self.client.request(method, url, **kwargs)
+            if resp.status_code != 429 or attempt == max_retries:
+                return resp
+            retry_after = int(resp.headers.get('Retry-After', 2**attempt))
+            logger.warning('Rate limited (429), retrying in %ds (attempt %d/%d)', retry_after, attempt + 1, max_retries)
+            time.sleep(retry_after)
+        return resp  # unreachable
+
     def _paginate(self, url: str, params: dict | None = None) -> list[dict]:
         results = []
         seen_ids: set[int] = set()
@@ -44,8 +69,7 @@ class BitbucketProvider(GitProvider):
         page = 1
         while True:
             logger.debug('Paginate %s (page %d)', url, page)
-            resp = self.client.get(url, params=params)
-            resp.raise_for_status()
+            resp = self._request('GET', url, params=params)
             data = resp.json()
             values = data.get('values', [])
             new_values = [v for v in values if v.get('id') not in seen_ids]
@@ -85,8 +109,7 @@ class BitbucketProvider(GitProvider):
 
     def get_pr(self, repo_slug: str, pr_id: int) -> PRInfo:
         url = f'/repositories/{self.workspace}/{repo_slug}/pullrequests/{pr_id}'
-        resp = self.client.get(url)
-        resp.raise_for_status()
+        resp = self._request('GET', url)
         return self._pr_from_data(repo_slug, resp.json())
 
     def post_comment(
@@ -112,15 +135,14 @@ class BitbucketProvider(GitProvider):
                 inline['to'] = line
             payload['inline'] = inline
 
-        resp = self.client.post(url, json=payload)
-        resp.raise_for_status()
+        resp = self._request('POST', url, json=payload)
         comment_id = resp.json()['id']
         logger.info('Posted comment %d on PR #%d', comment_id, pr_id)
         return comment_id
 
     def delete_comment(self, repo_slug: str, pr_id: int, comment_id: int) -> bool:
         url = f'/repositories/{self.workspace}/{repo_slug}/pullrequests/{pr_id}/comments/{comment_id}'
-        resp = self.client.delete(url)
+        resp = self._request_raw('DELETE', url)
         if resp.status_code == 204:
             logger.info('Deleted comment %d on PR #%d', comment_id, pr_id)
             return True
@@ -153,15 +175,14 @@ class BitbucketProvider(GitProvider):
 
     def create_task(self, repo_slug: str, pr_id: int, message: str) -> int:
         url = f'/repositories/{self.workspace}/{repo_slug}/pullrequests/{pr_id}/tasks'
-        resp = self.client.post(url, json={'content': {'raw': message}})
-        resp.raise_for_status()
+        resp = self._request('POST', url, json={'content': {'raw': message}})
         task_id = resp.json()['id']
         logger.info('Created task %d on PR #%d', task_id, pr_id)
         return task_id
 
     def delete_task(self, repo_slug: str, pr_id: int, task_id: int) -> bool:
         url = f'/repositories/{self.workspace}/{repo_slug}/pullrequests/{pr_id}/tasks/{task_id}'
-        resp = self.client.delete(url)
+        resp = self._request_raw('DELETE', url)
         if resp.status_code == 204:
             logger.info('Deleted task %d on PR #%d', task_id, pr_id)
             return True

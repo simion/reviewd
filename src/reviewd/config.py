@@ -191,6 +191,7 @@ def load_global_config(path: str | Path | None = None) -> GlobalConfig:
         cli_defaults={CLI(k): v for k, v in data.get('cli_defaults', {}).items()},
         instructions=data.get('instructions'),
         auto_approve=global_aa,
+        inline_comments_for=data.get('inline_comments_for'),
         skip_title_patterns=data.get('skip_title_patterns', ['[no-review]', '[wip]', '[no-claudiu]']),
         skip_authors=data.get('skip_authors', []),
         poll_interval_seconds=data.get('poll_interval_seconds', 60),
@@ -285,7 +286,7 @@ def load_project_config(repo_path: str | Path, global_config: GlobalConfig) -> P
     return ProjectConfig(
         instructions=instructions,
         test_commands=data.get('test_commands', []),
-        inline_comments_for=data.get('inline_comments_for', ['critical']),
+        inline_comments_for=data.get('inline_comments_for', global_config.inline_comments_for or ['critical']),
         max_inline_comments=data.get('max_inline_comments'),
         skip_severities=data.get('skip_severities', []),
         show_overview=data.get('show_overview', False),

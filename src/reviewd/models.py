@@ -120,6 +120,7 @@ class GlobalConfig:
     cli_defaults: dict[CLI, list[str]] = field(default_factory=dict)
     instructions: str | None = None
     auto_approve: AutoApproveConfig | None = None
+    inline_comments_for: list[str] | None = None
     skip_title_patterns: list[str] = field(default_factory=lambda: ['[no-review]', '[wip]', '[no-claudiu]'])
     skip_authors: list[str] = field(default_factory=list)
     poll_interval_seconds: int = 60
