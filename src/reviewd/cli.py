@@ -88,6 +88,17 @@ def _attach_file_logging(log_file: str | None):
     )
     logging.root.addHandler(handler)
 
+    # When running non-interactively (e.g. under launchd), the stderr stream
+    # is captured to a file the supervisor opened once and never reopens.
+    # Our RotatingFileHandler renames on rotation, but the supervisor's FD
+    # stays bound to the old inode — every rotation strands stderr on the
+    # rotated file, producing multi-GB orphans. Raise stderr to WARNING so
+    # the supervisor's capture only catches startup crashes and real errors.
+    if not sys.stderr.isatty():
+        for h in logging.root.handlers:
+            if isinstance(h, logging.StreamHandler) and not isinstance(h, logging.FileHandler):
+                h.setLevel(logging.WARNING)
+
 
 def _resolve_verbose(ctx, local_verbose: bool) -> bool:
     verbose = ctx.obj['verbose'] or local_verbose
