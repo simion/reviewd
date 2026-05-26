@@ -169,6 +169,15 @@ class BitbucketProvider(GitProvider):
         logger.info('Approved PR #%d', pr_id)
         return True
 
+    def submit_review(self, repo_slug, pr_id, body, event, inline_comments, source_commit):
+        raise NotImplementedError("BitBucket does not support formal reviews")
+
+    def dismiss_review(self, repo_slug, pr_id, review_id, message):
+        raise NotImplementedError("BitBucket does not support formal reviews")
+
+    def get_diff_lines(self, repo_slug, pr_id):
+        raise NotImplementedError("BitBucket does not support formal reviews")
+
     def list_tasks(self, repo_slug: str, pr_id: int) -> list[dict]:
         url = f'/repositories/{self.workspace}/{repo_slug}/pullrequests/{pr_id}/tasks'
         return self._paginate(url)
