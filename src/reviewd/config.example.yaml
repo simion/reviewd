@@ -102,6 +102,15 @@
 # inline_comments_for:
 #   - critical
 
+# Drive the PR review process on GitHub — reviewd submits a single formal review
+# instead of scattered comments. When findings include 'critical', the review uses
+# REQUEST_CHANGES and blocks the PR (under branch protection). When auto_approve
+# gates pass, the review uses APPROVE. Otherwise it's a COMMENT review.
+#
+# GitHub only. BitBucket repos fall back to scattered comments even if this is true.
+# Default: false. Can be overridden per-repo.
+# formal_review: false
+
 # --- PR filtering ---
 
 # Skip PRs whose title contains any of these patterns (case-insensitive)
@@ -123,14 +132,7 @@
 # min_diff_lines: 0             # skip initial PR review if fewer changed lines (0 = disabled)
 # min_diff_lines_update: 5      # skip re-review on pushed commits if fewer changed lines
 # review_cooldown_minutes: 30   # don't re-review same PR within N minutes
-# Drive the PR review process on GitHub — reviewd submits a single formal review
-# instead of scattered comments. When findings include 'critical', the review uses
-# REQUEST_CHANGES and blocks the PR (under branch protection). When auto_approve
-# gates pass, the review uses APPROVE. Otherwise it's a COMMENT review.
-#
-# GitHub only. BitBucket repos fall back to scattered comments even if this is true.
-# Default: false. Can be overridden per-repo.
-# formal_review: false
+# formal_review: false          # GitHub only — see global formal_review docs above
 
 # approve_if_no_critical: false  # deprecated, use auto_approve instead
 # auto_approve:

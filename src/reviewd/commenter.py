@@ -248,13 +248,16 @@ def _dismiss_prior_reviews(provider: GitProvider, state_db: StateDB, pr: PRInfo)
             continue
 
         if state == 'CHANGES_REQUESTED':
-            provider.dismiss_review(
+            if provider.dismiss_review(
                 pr.repo_slug,
                 pr.pr_id,
                 review_id,
                 'Superseded by newer reviewd review',
-            )
-        state_db.delete_review(pr.repo_slug, pr.pr_id, review_id)
+            ):
+                state_db.delete_review(pr.repo_slug, pr.pr_id, review_id)
+            # else: leave in state DB so next pass retries the dismissal
+        else:
+            state_db.delete_review(pr.repo_slug, pr.pr_id, review_id)
 
 
 def _filter_inline_findings_by_diff(
@@ -340,6 +343,11 @@ def post_review(
         provider.supports_formal_review
         and effective_formal_review(global_config, repo_config)
     )
+    if effective_formal_review(global_config, repo_config) and not provider.supports_formal_review:
+        logger.warning(
+            'formal_review enabled but provider %s does not support it — falling back to comment-based review',
+            type(provider).__name__,
+        )
 
     if dry_run:
         _print_dry_run(
@@ -354,6 +362,7 @@ def post_review(
             use_formal=use_formal,
         )
         return
+
     if use_formal:
         _post_formal_review(
             provider,

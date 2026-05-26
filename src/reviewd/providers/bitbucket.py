@@ -6,7 +6,7 @@ import time
 
 import httpx
 
-from reviewd.models import PRInfo
+from reviewd.models import InlineComment, PRInfo, ReviewEvent
 from reviewd.providers.base import GitProvider
 
 logger = logging.getLogger(__name__)
@@ -169,17 +169,25 @@ class BitbucketProvider(GitProvider):
         logger.info('Approved PR #%d', pr_id)
         return True
 
-    def submit_review(self, repo_slug, pr_id, body, event, inline_comments, source_commit):
-        raise NotImplementedError("BitBucket does not support formal reviews")
+    def submit_review(
+        self,
+        repo_slug: str,
+        pr_id: int,
+        body: str,
+        event: ReviewEvent,
+        inline_comments: list[InlineComment],
+        source_commit: str,
+    ) -> int | None:
+        raise NotImplementedError('BitBucket does not support formal reviews')
 
-    def dismiss_review(self, repo_slug, pr_id, review_id, message):
-        raise NotImplementedError("BitBucket does not support formal reviews")
+    def dismiss_review(self, repo_slug: str, pr_id: int, review_id: int, message: str) -> bool:
+        raise NotImplementedError('BitBucket does not support formal reviews')
 
-    def get_review_state(self, repo_slug, pr_id, review_id):
-        raise NotImplementedError("BitBucket does not support formal reviews")
+    def get_diff_lines(self, repo_slug: str, pr_id: int) -> dict[str, set[int]]:
+        raise NotImplementedError('BitBucket does not support formal reviews')
 
-    def get_diff_lines(self, repo_slug, pr_id):
-        raise NotImplementedError("BitBucket does not support formal reviews")
+    def get_review_state(self, repo_slug: str, pr_id: int, review_id: int) -> str:
+        raise NotImplementedError('BitBucket does not support formal reviews')
 
     def list_tasks(self, repo_slug: str, pr_id: int) -> list[dict]:
         url = f'/repositories/{self.workspace}/{repo_slug}/pullrequests/{pr_id}/tasks'
