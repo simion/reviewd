@@ -175,6 +175,9 @@ class BitbucketProvider(GitProvider):
     def dismiss_review(self, repo_slug, pr_id, review_id, message):
         raise NotImplementedError("BitBucket does not support formal reviews")
 
+    def get_review_state(self, repo_slug, pr_id, review_id):
+        raise NotImplementedError("BitBucket does not support formal reviews")
+
     def get_diff_lines(self, repo_slug, pr_id):
         raise NotImplementedError("BitBucket does not support formal reviews")
 

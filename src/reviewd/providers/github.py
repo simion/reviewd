@@ -190,6 +190,11 @@ class GithubProvider(GitProvider):
         logger.info('Dismissed review %d on PR #%d', review_id, pr_id)
         return True
 
+    def get_review_state(self, repo_slug: str, pr_id: int, review_id: int) -> str:
+        url = f'/repos/{repo_slug}/pulls/{pr_id}/reviews/{review_id}'
+        resp = self._request('GET', url)
+        return resp.json()['state']
+
     def get_diff_lines(self, repo_slug: str, pr_id: int) -> dict[str, set[int]]:
         files = self._paginate(f'/repos/{repo_slug}/pulls/{pr_id}/files', {'per_page': '100'})
         result: dict[str, set[int]] = {}

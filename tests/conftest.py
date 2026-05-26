@@ -48,6 +48,9 @@ class FakeProvider(GitProvider):
     def dismiss_review(self, repo_slug, pr_id, review_id, message):
         return True
 
+    def get_review_state(self, repo_slug, pr_id, review_id):
+        raise NotImplementedError
+
     def get_diff_lines(self, repo_slug, pr_id):
         raise NotImplementedError
 
