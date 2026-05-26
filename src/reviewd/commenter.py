@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import logging
 
+import httpx
+
 from reviewd.models import (
     CLI,
     SEVERITY_ORDER,
@@ -206,6 +208,30 @@ def _resolve_auto_approve(
     return False, blocked if show_reason else None
 
 
+def _filter_inline_findings_by_diff(
+    inline_findings: list[Finding],
+    provider: GitProvider,
+    pr: PRInfo,
+) -> list[Finding]:
+    if not inline_findings:
+        return inline_findings
+    try:
+        diff_lines = provider.get_diff_lines(pr.repo_slug, pr.pr_id)
+    except NotImplementedError:
+        return inline_findings
+    except httpx.HTTPError as e:
+        logger.warning('Could not fetch diff lines for pre-filter: %s — skipping filter', e)
+        return inline_findings
+
+    kept = []
+    for f in inline_findings:
+        if f.file in diff_lines and f.line in diff_lines[f.file]:
+            kept.append(f)
+        else:
+            logger.info('Dropping hallucinated inline finding %s:%s (not in diff)', f.file, f.line)
+    return kept
+
+
 def post_review(
     provider: GitProvider,
     state_db: StateDB,
@@ -246,6 +272,8 @@ def post_review(
 
     inline_severities = {s for s in project_config.inline_comments_for}
     inline_findings = [f for f in result.findings if f.severity.value in inline_severities and f.file and f.line]
+
+    inline_findings = _filter_inline_findings_by_diff(inline_findings, provider, pr)
 
     max_inline = project_config.max_inline_comments
     if max_inline is not None and len(inline_findings) > max_inline:
