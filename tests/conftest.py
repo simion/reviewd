@@ -76,6 +76,11 @@ def global_config():
 
 
 @pytest.fixture()
+def repo_config():
+    return RepoConfig(name='test', path='/tmp')
+
+
+@pytest.fixture()
 def project_config():
     return ProjectConfig()
 
