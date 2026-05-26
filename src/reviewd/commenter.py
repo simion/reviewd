@@ -271,6 +271,34 @@ def post_review(
         )
         return
 
+    _post_comment_review(
+        provider,
+        state_db,
+        pr,
+        result,
+        inline_findings,
+        inline_ids,
+        project_config,
+        global_config,
+        cli,
+        model,
+        diff_lines,
+    )
+
+
+def _post_comment_review(
+    provider: GitProvider,
+    state_db: StateDB,
+    pr: PRInfo,
+    result: ReviewResult,
+    inline_findings: list[Finding],
+    inline_ids: set[int],
+    project_config: ProjectConfig,
+    global_config: GlobalConfig,
+    cli: CLI,
+    model: str | None,
+    diff_lines: int | None,
+):
     logger.info('Posting review: %d inline + summary comment', len(inline_findings))
 
     old_comment_ids = state_db.get_comment_ids(pr.repo_slug, pr.pr_id)
