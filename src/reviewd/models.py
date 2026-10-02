@@ -61,6 +61,12 @@ class GithubConfig:
 
 
 @dataclass
+class GitlabConfig:
+    token: str
+    url: str = 'https://gitlab.com'
+
+
+@dataclass
 class AutoApproveConfig:
     enabled: bool = False
     max_diff_lines: int | None = None
@@ -101,6 +107,7 @@ class RepoConfig:
     repo_slug: str | None = None
     workspace: str | None = None
     github: GithubConfig | None = None
+    gitlab: GitlabConfig | None = None
     cli: CLI = CLI.CLAUDE
     model: str | None = None
 
@@ -114,6 +121,7 @@ class GlobalConfig:
     repos: list[RepoConfig]
     bitbucket: dict[str, str] = field(default_factory=dict)
     github: GithubConfig | None = None
+    gitlab: GitlabConfig | None = None
     state_db: str = ''
     cli: CLI = CLI.CLAUDE
     model: str | None = None

@@ -13,6 +13,7 @@ from reviewd.models import (
     SEVERITY_ORDER,
     AutoApproveConfig,
     GithubConfig,
+    GitlabConfig,
     GlobalConfig,
     ProjectConfig,
     RepoConfig,
@@ -40,6 +41,13 @@ def _parse_bitbucket_tokens(data: dict) -> dict[str, str]:
 def _parse_github_config(data: dict) -> GithubConfig:
     return GithubConfig(
         token=_resolve_env_vars(str(data['token'])),
+    )
+
+
+def _parse_gitlab_config(data: dict) -> GitlabConfig:
+    return GitlabConfig(
+        token=_resolve_env_vars(str(data['token'])),
+        url=_resolve_env_vars(str(data.get('url', GitlabConfig.url))),
     )
 
 
@@ -148,6 +156,8 @@ def load_global_config(path: str | Path | None = None) -> GlobalConfig:
     if 'github' in data:
         global_gh = _parse_github_config(data['github'])
 
+    global_gl = _parse_gitlab_config(data['gitlab']) if 'gitlab' in data else None
+
     global_cli = _parse_cli(data.get('cli', 'claude'))
 
     repos = []
@@ -159,6 +169,7 @@ def load_global_config(path: str | Path | None = None) -> GlobalConfig:
         repo_gh = None
         if 'github' in repo_data:
             repo_gh = _parse_github_config(repo_data['github'])
+        repo_gl = _parse_gitlab_config(repo_data['gitlab']) if 'gitlab' in repo_data else None
 
         repo_cli = _parse_cli(repo_data['cli'], repo_data['name']) if 'cli' in repo_data else global_cli
         repos.append(
@@ -169,6 +180,7 @@ def load_global_config(path: str | Path | None = None) -> GlobalConfig:
                 repo_slug=repo_data.get('repo_slug'),
                 workspace=repo_data.get('workspace'),
                 github=repo_gh,
+                gitlab=repo_gl,
                 cli=repo_cli,
                 model=repo_data.get('model', data.get('model')),
             )
@@ -184,6 +196,7 @@ def load_global_config(path: str | Path | None = None) -> GlobalConfig:
         repos=repos,
         bitbucket=global_bb,
         github=global_gh,
+        gitlab=global_gl,
         state_db=state_db,
         cli=global_cli,
         model=data.get('model'),
@@ -317,12 +330,25 @@ def resolve_github_config(global_config: GlobalConfig, repo_config: RepoConfig) 
     raise ValueError(f'No github config found for repo "{repo_config.name}"')
 
 
+def resolve_gitlab_config(global_config: GlobalConfig, repo_config: RepoConfig) -> GitlabConfig:
+    if repo_config.gitlab is not None:
+        return repo_config.gitlab
+    if global_config.gitlab is not None:
+        return global_config.gitlab
+    raise ValueError(f'No gitlab config found for repo "{repo_config.name}"')
+
+
 def get_provider(global_config: GlobalConfig, repo_config: RepoConfig) -> GitProvider:
     if repo_config.provider == 'github':
         from reviewd.providers.github import GithubProvider
 
         config = resolve_github_config(global_config, repo_config)
         return GithubProvider(config)
+
+    if repo_config.provider == 'gitlab':
+        from reviewd.providers.gitlab import GitlabProvider
+
+        return GitlabProvider(resolve_gitlab_config(global_config, repo_config))
 
     from reviewd.providers.bitbucket import BitbucketProvider
 

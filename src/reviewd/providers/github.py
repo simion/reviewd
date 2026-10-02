@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import logging
-import time
 
 import httpx
 
 from reviewd.models import GithubConfig, PRInfo
-from reviewd.providers.base import GitProvider
+from reviewd.providers.base import GitProvider, parse_next_link
 
 logger = logging.getLogger(__name__)
 
@@ -26,29 +25,6 @@ class GithubProvider(GitProvider):
             timeout=30,
         )
 
-    def _request(self, method: str, url: str, **kwargs) -> httpx.Response:
-        max_retries = 3
-        for attempt in range(max_retries + 1):
-            resp = self.client.request(method, url, **kwargs)
-            if resp.status_code != 429 or attempt == max_retries:
-                resp.raise_for_status()
-                return resp
-            retry_after = int(resp.headers.get('Retry-After', 2**attempt))
-            logger.warning('Rate limited (429), retrying in %ds (attempt %d/%d)', retry_after, attempt + 1, max_retries)
-            time.sleep(retry_after)
-        return resp  # unreachable
-
-    def _request_raw(self, method: str, url: str, **kwargs) -> httpx.Response:
-        max_retries = 3
-        for attempt in range(max_retries + 1):
-            resp = self.client.request(method, url, **kwargs)
-            if resp.status_code != 429 or attempt == max_retries:
-                return resp
-            retry_after = int(resp.headers.get('Retry-After', 2**attempt))
-            logger.warning('Rate limited (429), retrying in %ds (attempt %d/%d)', retry_after, attempt + 1, max_retries)
-            time.sleep(retry_after)
-        return resp  # unreachable
-
     def _paginate(self, url: str, params: dict | None = None) -> list[dict]:
         results = []
         params = params or {}
@@ -56,7 +32,7 @@ class GithubProvider(GitProvider):
             resp = self._request('GET', url, params=params)
             results.extend(resp.json())
             link = resp.headers.get('link', '')
-            next_url = _parse_next_link(link)
+            next_url = parse_next_link(link)
             if not next_url:
                 break
             url = next_url
@@ -149,11 +125,3 @@ class GithubProvider(GitProvider):
         resp.raise_for_status()
         logger.info('Approved PR #%d', pr_id)
         return True
-
-
-def _parse_next_link(link_header: str) -> str | None:
-    for part in link_header.split(','):
-        if 'rel="next"' in part:
-            url = part.split(';')[0].strip().strip('<>')
-            return url
-    return None

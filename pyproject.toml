@@ -1,12 +1,12 @@
 [project]
 name = "reviewd"
 version = "0.7.2"
-description = "Local AI code reviewer for GitHub and BitBucket PRs — uses Claude, Gemini, or Codex CLI to review pull requests and post structured comments"
+description = "Local AI code reviewer for GitHub, GitLab and BitBucket PRs — uses Claude, Gemini, or Codex CLI to review pull requests and post structured comments"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
 authors = [{name = "Simion Agavriloaei", email = "hi@simion.cv"}]
-keywords = ["code-review", "ai", "github", "bitbucket", "pull-request", "claude", "gemini", "codex", "automation"]
+keywords = ["code-review", "ai", "github", "gitlab", "bitbucket", "pull-request", "claude", "gemini", "codex", "automation"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",

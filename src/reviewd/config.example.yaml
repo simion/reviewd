@@ -4,7 +4,7 @@
 # Run `reviewd init` to copy this file to the right location.
 # Uncomment and customize the settings you need.
 
-# --- Provider credentials (configure one or both) ---
+# --- Provider credentials (configure the ones you need) ---
 
 # GitHub (requires a Personal Access Token with `repo` scope)
 # github:
@@ -29,6 +29,14 @@
 # bitbucket:
 #   my-workspace: ${BB_WORKSPACE_TOKEN}              # workspace token (Bearer)
 #   # or: my-workspace: ${BB_EMAIL}:${BB_USER_TOKEN} # user token (Basic)
+
+# GitLab (Personal/Project/Group Access Token with `api` scope)
+#   Create at: https://gitlab.com/-/user_settings/personal_access_tokens
+#   url defaults to https://gitlab.com — set it for self-hosted instances.
+#   A repo can override this with its own `gitlab:` block (token + url).
+# gitlab:
+#   token: ${GITLAB_TOKEN}
+#   # url: https://gitlab.example.com
 
 # --- AI CLI settings ---
 
@@ -141,6 +149,11 @@ repos: []
   #   path: ~/repos/my-bb-project
   #   provider: bitbucket
   #   workspace: my-workspace          # must match a key in bitbucket section
+  #
+  # - name: my-gl-project
+  #   repo_slug: group/subgroup/my-gl-project   # full project path for GitLab API
+  #   path: ~/repos/my-gl-project
+  #   provider: gitlab
   #   # cli: gemini              # override per repo
   #   # model: gemini-2.5-pro    # override per repo
 

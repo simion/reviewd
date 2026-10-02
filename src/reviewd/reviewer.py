@@ -133,8 +133,13 @@ def create_worktree(repo_path: str, pr: PRInfo) -> str:
                     f'{dest_result.stderr.decode().strip()}'
                 )
             # Try PR refs (works for forks and deleted branches)
-            # GitHub: refs/pull/<id>/head, BitBucket: refs/pull-requests/<id>/from
-            for pr_ref in [f'pull/{pr.pr_id}/head', f'pull-requests/{pr.pr_id}/from']:
+            # GitHub: refs/pull/<id>/head, BitBucket: refs/pull-requests/<id>/from,
+            # GitLab: refs/merge-requests/<iid>/head
+            for pr_ref in [
+                f'pull/{pr.pr_id}/head',
+                f'pull-requests/{pr.pr_id}/from',
+                f'merge-requests/{pr.pr_id}/head',
+            ]:
                 ref_result = subprocess.run(
                     ['git', 'fetch', 'origin', pr_ref],
                     cwd=repo_path,

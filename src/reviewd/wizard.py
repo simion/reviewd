@@ -13,7 +13,11 @@ from questionary import Style
 REMOTE_PATTERNS = [
     (r'github\.com[:/](?P<slug>[^/\s]+/[^/\s]+)', 'github'),
     (r'bitbucket\.org[:/](?P<slug>[^/\s]+/[^/\s]+)', 'bitbucket'),
+    # gitlab.com or a self-hosted instance whose hostname contains "gitlab"; slug may include subgroups
+    (r'(?:^|@|://)(?P<host>[\w.-]*gitlab[\w.-]*)(?::\d+)?[:/](?P<slug>[^\s:]+/[^\s:]+)', 'gitlab'),
 ]
+
+GITLAB_DEFAULT_URL = 'https://gitlab.com'
 
 STYLE = Style(
     [
@@ -73,6 +77,9 @@ def _detect_remote(repo_path: str) -> dict | None:
             elif provider == 'bitbucket':
                 info['workspace'] = parts[0]
                 info['slug'] = parts[-1]
+            elif provider == 'gitlab':
+                info['slug'] = slug
+                info['gitlab_url'] = f'https://{match.group("host")}'
             return info
     return None
 
@@ -131,6 +138,20 @@ def _validate_github_token(token: str) -> str | None:
     return None
 
 
+def _validate_gitlab_token(url: str, token: str) -> str | None:
+    try:
+        resp = httpx.get(
+            f'{url}/api/v4/user',
+            headers={'Authorization': f'Bearer {token}'},
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            return resp.json().get('username')
+    except httpx.HTTPError:
+        pass
+    return None
+
+
 def _validate_bitbucket_token(token: str, email: str | None = None) -> str | None:
     try:
         if email:
@@ -181,6 +202,43 @@ def _prompt_github_token(repo_names: list[str]) -> str:
             _success(f'Authenticated as {username}')
             return token
         _error('Invalid token, try again')
+
+
+def _prompt_gitlab_tokens(gl_repos: list[dict]) -> dict[str, str]:
+    """Prompt for a GitLab token per instance. Returns {instance_url: token}."""
+    tokens: dict[str, str] = {}
+    for url in sorted({r['gitlab_url'] for r in gl_repos}):
+        repos_str = ', '.join(click.style(r['name'], bold=True) for r in gl_repos if r['gitlab_url'] == url)
+        click.echo(f'  GitLab token needed for {url}: {repos_str}')
+        click.echo()
+        tokens_url = f'{url}/-/user_settings/personal_access_tokens'
+        click.echo('  Create a Personal Access Token (or a project/group access token):')
+        click.echo()
+        click.echo(f'    1. Go to {click.style(tokens_url, fg="cyan", underline=True)}')
+        click.echo('    2. Set a token name (e.g. "reviewd") and expiration')
+        click.echo('    3. Scopes → api')
+        click.echo('    4. Click "Create token" and paste below')
+        click.echo()
+
+        while True:
+            token = questionary.password('GitLab token:', style=STYLE).unsafe_ask()
+            if not token:
+                continue
+            click.echo('  Validating...')
+            username = _validate_gitlab_token(url, token)
+            if username:
+                _success(f'Authenticated as {username}')
+                tokens[url] = token
+                break
+            _error('Invalid token, try again')
+    return tokens
+
+
+def _gitlab_yaml(token: str, url: str, indent: str) -> list[str]:
+    lines = [f'{indent}gitlab:', f'{indent}  token: "{token}"']
+    if url != GITLAB_DEFAULT_URL:
+        lines.append(f'{indent}  url: {url}')
+    return lines
 
 
 def _prompt_bitbucket_tokens(bb_repos: list[dict]) -> dict[str, str]:
@@ -266,9 +324,17 @@ def _build_global_config_yaml(
     repos: list[dict],
     github_token: str | None,
     bitbucket_creds: dict[str, str],
+    gitlab_tokens: dict[str, str],
     cli: str,
 ) -> str:
     lines = []
+
+    # One GitLab instance goes in the global section (gitlab.com preferred); others are set per repo
+    global_gitlab_url = None
+    if gitlab_tokens:
+        global_gitlab_url = GITLAB_DEFAULT_URL if GITLAB_DEFAULT_URL in gitlab_tokens else min(gitlab_tokens)
+        lines.extend(_gitlab_yaml(gitlab_tokens[global_gitlab_url], global_gitlab_url, ''))
+        lines.append('')
 
     if github_token:
         lines.append('github:')
@@ -319,6 +385,10 @@ def _build_global_config_yaml(
                 lines.append(f'    workspace: {repo["workspace"]}')
             if repo.get('slug'):
                 lines.append(f'    repo_slug: {repo["slug"]}')
+        elif repo['provider'] == 'gitlab':
+            lines.append(f'    repo_slug: {repo["slug"]}')
+            if repo['gitlab_url'] != global_gitlab_url:
+                lines.extend(_gitlab_yaml(gitlab_tokens[repo['gitlab_url']], repo['gitlab_url'], '    '))
         lines.append('')
 
     return '\n'.join(lines)
@@ -382,6 +452,18 @@ github:
 #   my-workspace: ATCTT3x...                    # workspace token
 #   # or: my-workspace: me@example.com:ATATT3x... # user token
 
+# ─── GitLab ───────────────────────────────────────────────────────────
+# Create a Personal Access Token (or a project/group access token):
+#   1. Go to https://gitlab.com/-/user_settings/personal_access_tokens
+#   2. Set a token name (e.g. "reviewd") and expiration
+#   3. Scopes → api
+#   4. Create token
+# For self-hosted GitLab, set url. A repo can override this with its own gitlab: block.
+#
+# gitlab:
+#   token: glpat-YOUR_TOKEN_HERE
+#   # url: https://gitlab.example.com
+
 # ─── AI CLI ───────────────────────────────────────────────────────────
 cli: claude                           # claude, gemini, or codex
 # model: claude-sonnet-4-5-20250514
@@ -424,6 +506,12 @@ repos:
   #   provider: bitbucket
   #   workspace: my-workspace          # workspace from BitBucket URL
   #   repo_slug: repo-name             # repo slug from BitBucket URL
+
+  # GitLab example:
+  # - name: my-gl-project
+  #   path: /path/to/my-gl-project
+  #   provider: gitlab
+  #   repo_slug: group/subgroup/repo   # full project path from GitLab URL
 """
 
 
@@ -459,7 +547,7 @@ def _run_wizard_inner():
         click.echo('  Edit the config file to add your tokens and repos:')
         click.echo(f'    {click.style(str(config_path), fg="cyan")}')
         click.echo()
-        click.echo('  The file includes instructions for creating GitHub and BitBucket tokens.')
+        click.echo('  The file includes instructions for creating GitHub, BitBucket and GitLab tokens.')
         click.echo('  Uncomment and fill in the sections you need.')
         click.echo()
         return
@@ -510,7 +598,7 @@ def _run_wizard_inner():
             available = [r for r in found if r['path'] not in already_paths]
 
             if not available:
-                _info('No repos with recognized remotes (GitHub/BitBucket) found.')
+                _info('No repos with recognized remotes (GitHub/BitBucket/GitLab) found.')
             else:
                 # Build choices for checkbox
                 choices = []
@@ -559,6 +647,7 @@ def _run_wizard_inner():
     providers = {r['provider'] for r in selected_repos}
     github_token = None
     bitbucket_creds: dict[str, str] = {}
+    gitlab_tokens: dict[str, str] = {}
 
     if 'github' in providers:
         _section('GitHub Credentials')
@@ -569,6 +658,11 @@ def _run_wizard_inner():
         _section('BitBucket Credentials')
         bb_repos = [r for r in selected_repos if r['provider'] == 'bitbucket']
         bitbucket_creds = _prompt_bitbucket_tokens(bb_repos)
+
+    if 'gitlab' in providers:
+        _section('GitLab Credentials')
+        gl_repos = [r for r in selected_repos if r['provider'] == 'gitlab']
+        gitlab_tokens = _prompt_gitlab_tokens(gl_repos)
 
     # 4. AI CLI choice
     _section('AI CLI')
@@ -583,7 +677,7 @@ def _run_wizard_inner():
     # 5. Write configs
     _section('Writing Configuration')
 
-    config_yaml = _build_global_config_yaml(selected_repos, github_token, bitbucket_creds, cli)
+    config_yaml = _build_global_config_yaml(selected_repos, github_token, bitbucket_creds, gitlab_tokens, cli)
     config_dir.mkdir(parents=True, exist_ok=True)
     config_path.write_text(config_yaml)
     _success(f'Created {config_path}')

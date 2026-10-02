@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![CI](https://github.com/simion/reviewd/actions/workflows/ci.yml/badge.svg)](https://github.com/simion/reviewd/actions/workflows/ci.yml)
 
-**Your local code review assistant** — review GitHub and BitBucket pull requests from your terminal, powered by Claude Code / Gemini / Codex CLI.
+**Your local code review assistant** — review GitHub, GitLab and BitBucket pull requests from your terminal, powered by Claude Code / Gemini / Codex CLI.
 
 https://github.com/user-attachments/assets/e99705d6-5595-478e-b5de-f47d3abcfa37
 
@@ -67,7 +67,7 @@ Requires Python 3.12+. You also need `claude`, `gemini`, or `codex` CLI installe
 reviewd init   # interactive wizard — detects repos, guides token creation, writes config
 ```
 
-The wizard scans your repos, detects GitHub/BitBucket remotes, validates credentials, and writes both global and per-project configs. Prefer YAML? Choose "Sample config file" to get an annotated template instead.
+The wizard scans your repos, detects GitHub/GitLab/BitBucket remotes, validates credentials, and writes both global and per-project configs. Prefer YAML? Choose "Sample config file" to get an annotated template instead.
 
 <details>
 <summary><b>GitHub setup</b></summary>
@@ -124,7 +124,29 @@ repos:
 
 </details>
 
-Both providers can be used in the same config. Tokens support `${ENV_VAR}` substitution.
+<details>
+<summary><b>GitLab setup</b></summary>
+
+1. Create a [Personal Access Token](https://gitlab.com/-/user_settings/personal_access_tokens) (or a project/group access token) with the **api** scope.
+2. Config:
+
+```yaml
+gitlab:
+  token: glpat-YOUR_TOKEN
+  # url: https://gitlab.example.com   # self-hosted instance (default: https://gitlab.com)
+
+repos:
+  - name: my-repo
+    repo_slug: group/subgroup/my-repo   # full project path
+    path: ~/repos/my-repo
+    provider: gitlab
+```
+
+A repo on a different GitLab instance can set its own `gitlab:` block (`token` + `url`) to override the global one.
+
+</details>
+
+GitHub, GitLab and BitBucket repos can be mixed in the same config. Tokens support `${ENV_VAR}` substitution.
 
 ### 3. Review
 
@@ -140,7 +162,7 @@ reviewd watch -v                   # continuous review loop
 Check API -> State Check (SQLite) -> Fetch & Worktree -> AI Review (Claude/Gemini/Codex) -> Parse JSON -> Post Comments -> Cleanup
 ```
 
-1. Fetches open PRs from GitHub/BitBucket
+1. Fetches open PRs from GitHub/GitLab/BitBucket
 2. Skips already-reviewed commits, drafts, cooldowns, and small diffs
 3. Creates a git worktree, runs configured test commands
 4. Invokes the AI CLI with a structured prompt and JSON output schema
@@ -156,6 +178,10 @@ max_concurrent_reviews: 4
 
 github:
   token: ${GITHUB_TOKEN}
+
+gitlab:
+  token: ${GITLAB_TOKEN}
+  # url: https://gitlab.example.com
 
 bitbucket:
   your-workspace: you@example.com:${BB_API_TOKEN}
@@ -185,6 +211,11 @@ repos:
     workspace: your-workspace
     cli: gemini                   # or "codex"
     model: gemini-2.5-pro
+
+  - name: gl-service
+    repo_slug: group/gl-service
+    path: ~/repos/gl-service
+    provider: gitlab
 ```
 
 ### Per-project (`.reviewd.yaml` in repo root)
@@ -283,7 +314,7 @@ reviewd status <repo>                         # review history
 - **Full AI tool access** — the AI reads files, runs commands, explores code in the worktree
 - **JSON schema** — structured findings, the tool just parses and posts
 - **SQLite state** — WAL mode, thread-safe, tracks `(repo, pr_id, commit)` to avoid duplicates
-- **Provider abstraction** — GitHub and BitBucket, extensible
+- **Provider abstraction** — GitHub, GitLab and BitBucket, extensible
 
 ## Security
 
